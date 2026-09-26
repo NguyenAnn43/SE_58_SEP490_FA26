@@ -1,0 +1,125 @@
+const User = require("../models/User");
+const {
+  validateStudentBankAccount,
+  assertUniqueStudentBank,
+} = require("../utils/studentBankAccount");
+
+// ==========================================
+// QUYỀN CỦA KHÁCH HÀNG (USER BÌNH THƯỜNG)
+// ==========================================
+
+const getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "-password -resetPasswordToken -resetPasswordExpire",
+    );
+    if (!user)
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+
+    res.status(200).json({
+      _id: user._id,
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      avatar: user.avatar,
+      walletBalance: user.walletBalance,
+      isPremium: user.isPremium,
+      bankAccount: user.bankAccount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id);
+    if (!currentUser)
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+
+    const { name, phone, avatar, bankAccount } = req.body;
+    const updateFields = {};
+    if (name !== undefined && name !== null)
+      updateFields.name = String(name).trim();
+    if (phone !== undefined && phone !== null) {
+      const normalized = String(phone).trim();
+      if (normalized && !/^0\d{9,10}$/.test(normalized)) {
+        return res
+          .status(400)
+          .json({ message: "Số điện thoại không hợp lệ (VD: 0912345678)." });
+      }
+      updateFields.phone = normalized;
+    }
+    if (avatar !== undefined && avatar !== null)
+      updateFields.avatar = String(avatar).trim();
+
+    if (bankAccount !== undefined && bankAccount !== null) {
+      const isVendor = ["vendor", "vendor_owner"].includes(currentUser.role);
+      if (isVendor) {
+        updateFields.bankAccount = {
+          bankName: String(bankAccount.bankName || "")
+            .trim()
+            .toUpperCase(),
+          accountNumber: String(bankAccount.accountNumber || "").trim(),
+          accountName: String(bankAccount.accountName || "")
+            .trim()
+            .toUpperCase(),
+        };
+      } else if (currentUser.role !== "student") {
+        return res.status(403).json({
+          message:
+            "Không thể cập nhật tài khoản ngân hàng cho loại tài khoản này.",
+        });
+      } else {
+        const validated = validateStudentBankAccount(bankAccount);
+        if (!validated.ok) {
+          return res.status(400).json({ message: validated.message });
+        }
+        const unique = await assertUniqueStudentBank({
+          ...validated.data,
+          excludeUserId: currentUser._id,
+        });
+        if (!unique.ok) {
+          return res.status(400).json({ message: unique.message });
+        }
+        updateFields.bankAccount = validated.data;
+      }
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      updateFields,
+      { returnDocument: "after", runValidators: true },
+    ).select("-password -resetPasswordToken -resetPasswordExpire");
+
+    if (!updatedUser)
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    res.status(200).json({
+      message: "Cập nhật hồ sơ thành công!",
+      data: updatedUser,
+      user: {
+        _id: updatedUser._id,
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone || "",
+        role: updatedUser.role,
+        avatar: updatedUser.avatar,
+        walletBalance: updatedUser.walletBalance,
+        bankAccount: updatedUser.bankAccount,
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message:
+          "Số tài khoản này đã được khách hàng khác liên kết. Mỗi khách hàng phải dùng tài khoản ngân hàng riêng.",
+      });
+    }
+    res.status(500).json({ message: "Lỗi cập nhật", error: error.message });
+  }
+};
+
+module.exports = { getMyProfile, updateProfile };
