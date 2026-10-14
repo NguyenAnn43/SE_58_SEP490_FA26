@@ -480,6 +480,29 @@ const updateAdminBankInfo = async (req, res) => {
   }
 };
 
+// 7. 🌟 [GET] LẤY DANH SÁCH THÔNG BÁO CHO ADMIN
+const getAdminNotifications = async (req, res) => {
+  try {
+    // Lấy 50 thông báo mới nhất xếp lên đầu
+    const adminFilter = {
+      $or: [{ audience: "admin" }, { audience: { $exists: false } }],
+    };
+    const notifications = await Notification.find(adminFilter)
+      .sort({ createdAt: -1 })
+      .limit(50);
+    const unreadCount = await Notification.countDocuments({
+      ...adminFilter,
+      isRead: false,
+    });
+
+    res.status(200).json({ notifications, unreadCount });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi lấy thông báo", error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
