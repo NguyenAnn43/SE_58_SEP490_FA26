@@ -23,6 +23,9 @@ app.use("/api/auth", authRoutes);
 
 const vendorRoutes = require("./routes/vendorRoutes");
 app.use("/api/vendor", vendorRoutes);
+
+const menuItemRoutes = require("./routes/menuItemRoutes");
+app.use("/api/menuitems", menuItemRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
