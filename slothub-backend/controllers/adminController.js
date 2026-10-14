@@ -367,6 +367,39 @@ const getAllVendorsAdmin = async (req, res) => {
   }
 };
 
+// 4. [GET] LẤY DANH SÁCH QUẦY CHỜ DUYỆT
+// UC-48 - Approve Stall Registrations (view pending applications).
+const getPendingVendors = async (req, res) => {
+  try {
+    const vendors = await Vendor.find().populate(
+      "owner",
+      "name email phone avatar isApproved role createdAt",
+    );
+
+    const pendingVendors = vendors.filter(
+      (v) =>
+        v.owner &&
+        v.owner.isApproved === false &&
+        v.owner.role === "vendor_owner",
+    );
+
+    const normalized = pendingVendors.map((v) => {
+      const doc = normalizeVendorHours(v);
+      return {
+        ...doc,
+        hoursDisplay: formatVendorHoursRange(doc.openTime, doc.closeTime),
+      };
+    });
+    res.status(200).json(normalized);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Lỗi khi lấy danh sách chờ duyệt",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
