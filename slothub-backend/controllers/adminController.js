@@ -267,6 +267,29 @@ const getDashboardActivity = async (req, res) => {
   }
 };
 
+// 2. [GET] Lấy thông tin Ngân hàng của Admin cho Sinh viên nạp tiền
+// UC-50 - Config System Bank (read configured bank details).
+const getAdminBankInfo = async (req, res) => {
+  try {
+    const admin = await User.findOne({ role: "admin" });
+
+    if (!admin) {
+      return res.status(404).json({ message: "Hệ thống chưa có Admin!" });
+    }
+
+    res.status(200).json({
+      bankName: admin.bankAccount?.bankName || "",
+      accountNumber: admin.bankAccount?.accountNumber || "",
+      accountName: admin.bankAccount?.accountName || "",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Lỗi lấy thông tin ngân hàng Admin",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
