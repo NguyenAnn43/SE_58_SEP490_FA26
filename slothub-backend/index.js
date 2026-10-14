@@ -26,6 +26,9 @@ app.use("/api/vendor", vendorRoutes);
 
 const menuItemRoutes = require("./routes/menuItemRoutes");
 app.use("/api/menuitems", menuItemRoutes);
+
+const timeSlotRoutes = require("./routes/timeSlotRoutes");
+app.use("/api/timeslots", timeSlotRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
