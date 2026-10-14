@@ -20,6 +20,9 @@ connectDB();
 // ==========================================
 const authRoutes = require("./routes/authRoutes");
 app.use("/api/auth", authRoutes);
+
+const vendorRoutes = require("./routes/vendorRoutes");
+app.use("/api/vendor", vendorRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
