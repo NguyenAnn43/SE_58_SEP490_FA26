@@ -432,6 +432,31 @@ const approveVendor = async (req, res) => {
   }
 };
 
+// 5. [DELETE] TỪ CHỐI (XÓA LUÔN YÊU CẦU)
+// UC-48 - Approve Stall Registrations (reject an application).
+const rejectVendor = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    await User.findByIdAndDelete(userId);
+    await Vendor.findOneAndDelete({ owner: userId });
+
+    await logAudit({
+      actor: req.user.id,
+      actorRole: "admin",
+      action: "VENDOR_REJECTED",
+      entityType: "User",
+      entityId: userId,
+    });
+
+    res.status(200).json({ message: "🗑️ Đã từ chối và xóa yêu cầu đăng ký!" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi từ chối yêu cầu", error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
