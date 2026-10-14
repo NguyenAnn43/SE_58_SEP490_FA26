@@ -503,6 +503,68 @@ const getAdminNotifications = async (req, res) => {
   }
 };
 
+// 8. 🌟 [PUT] ĐÁNH DẤU ĐÃ ĐỌC (1 CÁI HOẶC TẤT CẢ)
+const markNotificationAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (id === "all") {
+      await Notification.updateMany(
+        {
+          isRead: false,
+          $or: [{ audience: "admin" }, { audience: { $exists: false } }],
+        },
+        { isRead: true },
+      );
+      return res.status(200).json({ message: "Đã đánh dấu đọc tất cả!" });
+    } else {
+      await Notification.findByIdAndUpdate(id, { isRead: true });
+      return res.status(200).json({ message: "Đã đọc thông báo!" });
+    }
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi xử lý thông báo", error: error.message });
+  }
+};
+
+// 9. Chính sách hủy đơn
+const getCancellationPolicyAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Chỉ Admin" });
+    }
+    const policy = await getCancellationPolicy();
+    return res.json({
+      policy,
+      display: formatPolicyForDisplay(policy),
+      defaults: DEFAULT_POLICY,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Lỗi tải chính sách", error: error.message });
+  }
+};
+
+const updateCancellationPolicyAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Chỉ Admin" });
+    }
+    const policy = await saveCancellationPolicy(req.body);
+    return res.json({
+      message: "Đã cập nhật chính sách hủy đơn",
+      policy,
+      display: formatPolicyForDisplay(policy),
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Lỗi lưu chính sách", error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
