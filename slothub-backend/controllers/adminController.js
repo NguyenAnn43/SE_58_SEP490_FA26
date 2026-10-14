@@ -400,6 +400,38 @@ const getPendingVendors = async (req, res) => {
   }
 };
 
+// 4. [PUT] DUYỆT QUẦY (MỞ KHÓA TÀI KHOẢN)
+// UC-48 - Approve Stall Registrations.
+const approveVendor = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { isApproved: true },
+      { returnDocument: "after" },
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy tài khoản chủ quầy!" });
+
+    await logAudit({
+      actor: req.user.id,
+      actorRole: "admin",
+      action: "VENDOR_APPROVED",
+      entityType: "User",
+      entityId: userId,
+    });
+
+    res.status(200).json({ message: "🎉 Đã duyệt gian hàng thành công!" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi duyệt quầy", error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
