@@ -457,6 +457,29 @@ const rejectVendor = async (req, res) => {
   }
 };
 
+// 6. [PUT] LƯU THÔNG TIN NGÂN HÀNG
+// UC-50 - Config System Bank (save configured bank details).
+const updateAdminBankInfo = async (req, res) => {
+  try {
+    const { bankName, accountNumber, accountName } = req.body;
+
+    const admin = await User.findById(req.user._id);
+    if (!admin)
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy tài khoản Admin!" });
+
+    admin.bankAccount = { bankName, accountNumber, accountName };
+    await admin.save();
+
+    res.status(200).json({ message: "Lưu cấu hình Ngân hàng thành công!" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi cập nhật ngân hàng", error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getCashFlowChart,
