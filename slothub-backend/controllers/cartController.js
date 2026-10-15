@@ -101,3 +101,38 @@ exports.addToCart = async (req, res) => {
         res.status(500).json({ message: 'Lỗi thêm món', error: error.message });
     }
 };
+
+// 3. Xóa 1 món khỏi giỏ
+exports.removeFromCart = async (req, res) => {
+    try {
+        const cart = await Cart.findOne({ user: req.user.id });
+        cart.items = cart.items.filter(item => item.menuItem.toString() !== req.params.itemId);
+        await cart.save();
+
+        // 🌟 FIX LỖI: POPULATE lại sau khi xóa
+        await cart.populate(CART_POPULATE);
+
+        res.status(200).json({ 
+            message: 'Đã xóa món ăn', 
+            cart: buildCartResponse(cart)
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi xóa món', error: error.message });
+    }
+};
+
+// 4. Làm trống giỏ hàng (Sau khi thanh toán thành công)
+exports.clearCart = async (req, res) => {
+    try {
+        const cart = await Cart.findOne({ user: req.user.id });
+        cart.items = [];
+        await cart.save();
+        
+        res.status(200).json({ 
+            message: 'Giỏ hàng đã được làm sạch',
+            cart: { ...cart.toObject(), totalPrice: 0 }
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi làm sạch giỏ hàng' });
+    }
+};
