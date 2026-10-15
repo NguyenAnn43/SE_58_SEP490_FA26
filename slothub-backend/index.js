@@ -35,6 +35,9 @@ app.use("/api/cart", cartRoutes);
 
 const chatRoutes = require("./routes/chatRoutes");
 app.use("/api/chat", chatRoutes);
+
+const orderRoutes = require("./routes/orderRoutes");
+app.use("/api/orders", orderRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
