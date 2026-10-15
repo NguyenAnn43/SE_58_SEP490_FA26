@@ -65,9 +65,6 @@ exports.getCart = async (req, res) => {
 exports.addToCart = async (req, res) => {
     try {
         const { menuItemId, quantity } = req.body;
-        if (!Number.isInteger(quantity) || quantity < 1) {
-            return res.status(400).json({ message: 'Số lượng không hợp lệ!' });
-        }
         const item = await MenuItem.findById(menuItemId);
 
         if (!item) return res.status(404).json({ message: 'Không tìm thấy món ăn!' });
