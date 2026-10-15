@@ -229,6 +229,55 @@ const createOrder = async (req, res) => {
             });
         }
 
+        // --- XỬ LÝ PAYOS ---
+        if (paymentMethod === 'payos') {
+            for (const group of groupEntries) {
+                const newOrder = new Order({
+                    user: userId,
+                    vendor: group.vendorId,
+                    items: group.processedItems,
+                    totalPrice: group.totalAmount,
+                    note,
+                    pickupSlot: pickupSlotLabel,
+                    pickupSlotId: slot._id,
+                    pickupSlotStartAt,
+                    pickupSlotEndAt,
+                    pickupDay,
+                    status: 'Pending',
+                    paymentStatus: 'Unpaid',
+                    paymentMethod: 'payos',
+                    checkoutBatchId
+                });
+                await newOrder.save();
+                vendorNames[String(group.vendorId)] = group.vendor?.name || 'Quầy căng tin';
+                await logOrderStatus({
+                    orderId: newOrder._id,
+                    fromStatus: '',
+                    toStatus: 'Pending',
+                    changedBy: userId,
+                    changedByRole: 'student',
+                    note: 'Khởi tạo đơn PayOS'
+                });
+                createdOrders.push(newOrder);
+            }
+
+            await removeProcessedCartItems(cart, processedMenuItemIds);
+
+            const populatedOrders = await Order.find({ _id: { $in: createdOrders.map((o) => o._id) } })
+                .populate('vendor', 'name')
+                .populate('items.menuItem', 'name price imageUrl');
+
+            return res.status(201).json({
+                message: createdOrders.length > 1
+                    ? `Khởi tạo ${createdOrders.length} đơn PayOS`
+                    : 'Khởi tạo đơn PayOS',
+                orders: populatedOrders,
+                order: populatedOrders[0],
+                checkoutBatchId,
+                isPayOS: true
+            });
+        }
+
         return res.status(400).json({ message: 'Phương thức thanh toán không hợp lệ!' });
 
     } catch (error) {
