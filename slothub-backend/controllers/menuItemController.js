@@ -44,7 +44,23 @@ const getVendorMenu = async (req, res) => {
     }
 };
 
+const getMenuItemById = async (req, res) => {
+    try {
+        const item = await MenuItem.findById(req.params.id).populate('vendor', 'name openTime closeTime isActive isPaused pauseReason');
+        if (!item) return res.status(404).json({ message: 'Không tìm thấy món ăn này!' });
+        const status = getVendorStatus(item.vendor);
+        res.status(200).json({
+            ...item.toObject(),
+            vendorIsOpen: status.isOpen,
+            vendorStatusMessage: status.message
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi lấy chi tiết món', error: error.message });
+    }
+};
+
 module.exports = {
     getAllMenuItems,
-    getVendorMenu
+    getVendorMenu,
+    getMenuItemById
 };
