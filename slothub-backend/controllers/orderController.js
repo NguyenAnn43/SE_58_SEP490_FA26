@@ -285,6 +285,19 @@ const createOrder = async (req, res) => {
     }
 };
 
+const getMyOrders = async (req, res) => {
+    try {
+        const orders = await Order.find({ user: req.user.id })
+            .populate('vendor', 'name')
+            .populate('items.menuItem', 'name price imageUrl')
+            .sort({ createdAt: -1 });
+        res.status(200).json(orders);
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi lấy đơn hàng', error: error.message });
+    }
+};
+
 module.exports = {
-    createOrder
+    createOrder,
+    getMyOrders
 };
