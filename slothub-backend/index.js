@@ -32,6 +32,9 @@ app.use("/api/timeslots", timeSlotRoutes);
 
 const cartRoutes = require("./routes/cartRoutes");
 app.use("/api/cart", cartRoutes);
+
+const chatRoutes = require("./routes/chatRoutes");
+app.use("/api/chat", chatRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
