@@ -116,6 +116,15 @@ const requestTransaction = async (req, res) => {
     }
 };
 
+// 2. [GET] Lấy lịch sử dòng tiền Cá nhân
+const getMyTransactions = async (req, res) => {
+    try {
+        const transactions = await Transaction.find({ userId: req.user.id }).sort({ createdAt: -1 }); 
+        res.status(200).json(transactions);
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi lấy lịch sử giao dịch', error: error.message });
+    }
+};
 
 // 6. [GET] Tổng quan ví chủ quầy (số dư + lịch sử rút)
 const getVendorWalletSummary = async (req, res) => {
@@ -151,5 +160,6 @@ const getVendorWalletSummary = async (req, res) => {
 
 module.exports = {
     requestTransaction,
+    getMyTransactions,
     getVendorWalletSummary
 };

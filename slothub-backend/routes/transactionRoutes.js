@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect } = require('../middlewares/authMiddleware');
 const { 
     requestTransaction, 
+    getMyTransactions, 
     getVendorWalletSummary
 } = require('../controllers/transactionController');
 
@@ -11,6 +12,7 @@ router.use(protect);
 
 // ================= API CHO NGƯỜI DÙNG =================
 router.post('/request', requestTransaction); 
+router.get('/me', getMyTransactions);
 router.get('/vendor-wallet/me', getVendorWalletSummary);
 
 module.exports = router;
