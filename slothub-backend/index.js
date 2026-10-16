@@ -41,6 +41,9 @@ app.use("/api/orders", orderRoutes);
 
 const paymentRoutes = require("./routes/paymentRoutes");
 app.use("/api/payment", paymentRoutes);
+
+const transactionRoutes = require("./routes/transactionRoutes");
+app.use("/api/transactions", transactionRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
