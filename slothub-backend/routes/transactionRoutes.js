@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect } = require('../middlewares/authMiddleware');
 const { 
+    requestTransaction, 
     getVendorWalletSummary
 } = require('../controllers/transactionController');
 
@@ -9,6 +10,7 @@ const {
 router.use(protect);
 
 // ================= API CHO NGƯỜI DÙNG =================
+router.post('/request', requestTransaction); 
 router.get('/vendor-wallet/me', getVendorWalletSummary);
 
 module.exports = router;
