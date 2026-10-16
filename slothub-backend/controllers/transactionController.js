@@ -2,10 +2,11 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const { notifyAdmin } = require('../utils/adminNotify');
+const { studentHasBankAccount } = require('../utils/studentBankAccount');
 
 const isVendorRole = (role) => ['vendor', 'vendor_owner'].includes(role);
 
-// 1. [POST] Yêu cầu Nạp tiền vào ví (Sinh viên)
+// 1. [POST] Yêu cầu Nạp / Rút tiền (Sinh viên) hoặc Rút doanh thu (Chủ quầy → PAYOUT)
 const requestTransaction = async (req, res) => {
     try {
         const { type, amount, description } = req.body;
@@ -25,31 +26,88 @@ const requestTransaction = async (req, res) => {
             return res.status(400).json({ message: 'Chủ quầy không nạp ví qua kênh này. Doanh thu được cộng tự động khi có đơn.' });
         }
 
-        const txType = type;
+        const txType = type === 'WITHDRAW' && vendorUser ? 'PAYOUT' : type;
 
-        if (!['DEPOSIT'].includes(txType)) {
+        if (!['DEPOSIT', 'WITHDRAW', 'PAYOUT'].includes(txType)) {
             return res.status(400).json({ message: 'Loại giao dịch không hợp lệ!' });
         }
 
+        let userBankData = undefined;
+
+        if (type === 'WITHDRAW' || txType === 'PAYOUT') {
+            if (user.walletBalance < amount) {
+                return res.status(400).json({ message: 'Số dư ví không đủ để rút!' });
+            }
+
+            if (txType === 'WITHDRAW') {
+                if (user.role !== 'student') {
+                    return res.status(400).json({ message: 'Chỉ sinh viên rút tiền qua kênh này.' });
+                }
+                if (!studentHasBankAccount(user)) {
+                    return res.status(400).json({
+                        message: 'Bạn chưa liên kết tài khoản ngân hàng riêng. Vào Hồ sơ cá nhân để cập nhật STK nhận tiền.'
+                    });
+                }
+            } else if (!user.bankAccount?.accountNumber || !user.bankAccount?.bankName) {
+                return res.status(400).json({ message: 'Bạn chưa liên kết tài khoản ngân hàng. Vui lòng cập nhật trong Cài đặt quầy!' });
+            }
+
+            userBankData = {
+                bankName: user.bankAccount.bankName,
+                accountNumber: user.bankAccount.accountNumber,
+                accountName: user.bankAccount.accountName
+            };
+
+
+            // Trừ tiền đóng băng
+            user.walletBalance -= amount;
+            await user.save();
+        }
+
+        const vendorDoc = vendorUser ? await Vendor.findOne({ owner: user._id }) : null;
+
         const newTransaction = new Transaction({
             userId: user._id,
+            vendorId: vendorDoc?._id,
             amount: amount,
             type: txType,
             status: 'PENDING',
-            description: description || `Nạp ${amount.toLocaleString()}đ`
+            description: description || (
+                txType === 'DEPOSIT' ? `Nạp ${amount.toLocaleString()}đ` :
+                txType === 'PAYOUT' ? `Rút doanh thu ${amount.toLocaleString()}đ` :
+                `Rút ${amount.toLocaleString()}đ`
+            ),
+            bankInfo: userBankData
         });
         await newTransaction.save();
 
         const who = user.name || user.email;
-        await notifyAdmin(req, {
-            title: 'Yêu cầu nạp tiền',
-            message: `${who} yêu cầu nạp ${Number(amount).toLocaleString('vi-VN')}đ vào ví`,
-            type: 'DEPOSIT',
-            actionLink: 'transactions'
-        });
+        if (txType === 'DEPOSIT') {
+            await notifyAdmin(req, {
+                title: 'Yêu cầu nạp tiền',
+                message: `${who} yêu cầu nạp ${Number(amount).toLocaleString('vi-VN')}đ vào ví`,
+                type: 'DEPOSIT',
+                actionLink: 'transactions'
+            });
+        } else if (txType === 'WITHDRAW') {
+            await notifyAdmin(req, {
+                title: 'Yêu cầu rút tiền (SV)',
+                message: `${who} yêu cầu rút ${Number(amount).toLocaleString('vi-VN')}đ`,
+                type: 'WITHDRAW',
+                actionLink: 'transactions'
+            });
+        } else if (txType === 'PAYOUT') {
+            await notifyAdmin(req, {
+                title: 'Yêu cầu rút doanh thu quầy',
+                message: `${who} (chủ quầy) rút ${Number(amount).toLocaleString('vi-VN')}đ`,
+                type: 'PAYOUT',
+                actionLink: 'transactions'
+            });
+        }
 
+        const actionLabel = txType === 'DEPOSIT' ? 'Nạp' : 'Rút';
         res.status(201).json({ 
-            message: 'Yêu cầu Nạp tiền đã được gửi. Admin sẽ duyệt và chuyển khoản sớm nhất!',
+            message: `Yêu cầu ${actionLabel} tiền đã được gửi. Admin sẽ duyệt và chuyển khoản sớm nhất!`,
             transaction: newTransaction,
             newBalance: user.walletBalance
         });
@@ -57,6 +115,7 @@ const requestTransaction = async (req, res) => {
         res.status(500).json({ message: 'Lỗi xử lý giao dịch', error: error.message });
     }
 };
+
 
 // 6. [GET] Tổng quan ví chủ quầy (số dư + lịch sử rút)
 const getVendorWalletSummary = async (req, res) => {
