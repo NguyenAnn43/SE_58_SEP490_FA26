@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 const {
   validateStudentBankAccount,
   assertUniqueStudentBank,
@@ -8,6 +9,7 @@ const {
 // QUYỀN CỦA KHÁCH HÀNG (USER BÌNH THƯỜNG)
 // ==========================================
 
+// UC-06 - View Profile; also supplies wallet/bank details for UC-23 and UC-32.
 const getMyProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
@@ -33,6 +35,7 @@ const getMyProfile = async (req, res) => {
   }
 };
 
+// UC-05 - Update Profile; bank-account updates also support UC-32.
 const updateProfile = async (req, res) => {
   try {
     const currentUser = await User.findById(req.user.id);
@@ -122,4 +125,140 @@ const updateProfile = async (req, res) => {
   }
 };
 
-module.exports = { getMyProfile, updateProfile };
+// ==========================================
+// QUYỀN CỦA ADMIN (SUPER ADMIN)
+// ==========================================
+
+// 3. 🌟 [POST] Tạo tài khoản mới (Nâng cấp thêm Mật khẩu)
+// UC-47 - Manage Users (admin creates/pre-provisions an account).
+const createAccount = async (req, res) => {
+  try {
+    const { name, email, role, password } = req.body;
+
+    if (!name || !email || !role) {
+      return res.status(400).json({
+        message: "Vui lòng điền đầy đủ thông tin (Tên, Email, Quyền)!",
+      });
+    }
+
+    // Bắt buộc phải khởi tạo mật khẩu nếu tạo Vendor hoặc Admin
+    if (
+      (role === "vendor" || role === "vendor_owner" || role === "admin") &&
+      !password
+    ) {
+      return res.status(400).json({
+        message:
+          "Vui lòng khởi tạo mật khẩu để Chủ quán/Admin có thể đăng nhập!",
+      });
+    }
+
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({
+        message: `Email này đã tồn tại với chức vụ: ${userExists.role.toUpperCase()}`,
+      });
+    }
+
+    // Mã hóa mật khẩu an toàn
+    let hashedPassword = undefined;
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    }
+
+    const newUser = await User.create({
+      name,
+      email,
+      role,
+      password: hashedPassword, // Lưu mật khẩu đã mã hóa
+      walletBalance: 0,
+    });
+
+    // Ẩn mật khẩu khi trả kết quả về
+    newUser.password = undefined;
+
+    res.status(201).json({
+      message: `🎉 Đã cấp tài khoản ${role.toUpperCase()} thành công! Hãy gửi Mật khẩu cho đối tác.`,
+      user: newUser,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Lỗi hệ thống khi tạo tài khoản",
+      error: error.message,
+    });
+  }
+};
+
+// UC-47 - Manage Users.
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find()
+      .select(
+        "name email phone role avatar walletBalance isApproved isActive createdAt updatedAt",
+      )
+      .sort({ createdAt: -1 });
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  }
+};
+
+// UC-47 - Manage Users.
+const updateUserRole = async (req, res) => {
+  try {
+    let { role } = req.body;
+    if (!role)
+      return res
+        .status(400)
+        .json({ message: "Vui lòng cung cấp Role muốn đổi!" });
+
+    role = role.toLowerCase();
+    const validRoles = ["student", "staff", "vendor", "vendor_owner", "admin"];
+    if (!validRoles.includes(role))
+      return res.status(400).json({ message: "Quyền (Role) không hợp lệ!" });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { role: role },
+      { returnDocument: "after" },
+    ).select("-password");
+    if (!updatedUser)
+      return res.status(404).json({ message: "Không tìm thấy người dùng!" });
+
+    res.status(200).json({
+      message: `Đã cấp quyền [${role.toUpperCase()}] cho tài khoản!`,
+      data: updatedUser,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi cập nhật quyền", error: error.message });
+  }
+};
+
+// UC-47 - Manage Users.
+const deleteUser = async (req, res) => {
+  try {
+    const deletedUser = await User.findByIdAndDelete(req.params.id);
+    if (!deletedUser)
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy người dùng để xóa!" });
+    res
+      .status(200)
+      .json({ message: "Đã xóa người dùng khỏi hệ thống thành công!" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Lỗi khi xóa người dùng", error: error.message });
+  }
+};
+
+module.exports = {
+  getMyProfile,
+  updateProfile,
+  createAccount,
+  getAllUsers,
+  updateUserRole,
+  deleteUser,
+};
