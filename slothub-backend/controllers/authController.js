@@ -36,6 +36,62 @@ const register = async (req, res) => {
   }
 };
 
+// ==========================================
+//  API QUÊN MẬT KHẨU (Gửi mã OTP 6 số)
+// ==========================================
+const PARTNER_RESET_ROLES = ['vendor', 'vendor_owner', 'admin'];
+
+const forgotPassword = async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: 'Vui lòng nhập email đăng nhập!' });
+    }
+
+    const user = await User.findOne({ email: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') })
+      .select('+password +resetPasswordToken +resetPasswordExpire');
+
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản đối tác với email này.' });
+    }
+
+    if (user.role === 'student') {
+      return res.status(400).json({ message: 'Tài khoản khách hàng đăng nhập bằng Google, không dùng mật khẩu email.' });
+    }
+
+    if (!PARTNER_RESET_ROLES.includes(user.role)) {
+      return res.status(403).json({ message: 'Loại tài khoản này không hỗ trợ khôi phục mật khẩu qua email.' });
+    }
+
+    if (!user.password) {
+      return res.status(400).json({ message: 'Tài khoản chưa có mật khẩu. Vui lòng liên hệ Admin để được cấp lại.' });
+    }
+
+    // Tạo mã OTP 6 chữ số
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+    
+    // Lưu lại bỏ qua validate để update token mượt hơn
+    await user.save({ validateBeforeSave: false });
+
+    const roleLabel = user.role === 'admin' ? 'Quản trị' : 'Chủ quầy';
+    const message = `Chào ${user.name || 'bạn'},\n\nBạn vừa yêu cầu khôi phục mật khẩu SlotHub (${roleLabel}).\n\nMã xác nhận: ${resetToken}\n\nMã có hiệu lực 15 phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.`;
+
+    await sendEmail({
+      email: user.email,
+      subject: 'Mã khôi phục mật khẩu SlotHub — Chủ quầy / Admin',
+      message
+    });
+
+    res.json({ message: 'Đã gửi mã 6 số vào email của bạn. Vui lòng kiểm tra hộp thư (cả thư rác).' });
+  } catch (error) {
+    console.error('forgotPassword:', error);
+    res.status(500).json({ message: 'Lỗi khi gửi email. Kiểm tra cấu hình EMAIL_USER / EMAIL_PASS trên server.' });
+  }
+};
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -167,4 +223,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, googleLogin, logout ,register  };
+module.exports = { login, googleLogin, logout ,register,forgotPassword  };

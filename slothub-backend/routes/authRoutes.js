@@ -22,7 +22,7 @@ const {
 router.post("/register", register);
 // router.post("/login", login);
 // router.post("/google", googleLogin);
-// router.post("/forgotpassword", forgotPassword);
+router.post("/forgotpassword", forgotPassword); 
 // router.post("/resetpassword", resetPassword);
 
 // 🌟 ROUTE MỚI: Mở cổng Đăng ký gian hàng
