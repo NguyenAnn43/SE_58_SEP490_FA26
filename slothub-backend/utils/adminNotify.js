@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
  * @param {import('express').Request} req - để emit socket nếu có
  */
 const notifyAdmin = async (req, { title, message, type = 'SYSTEM', actionLink = '' }) => {
+    console.log(" đã đến được đây ")
     try {
         const noti = await Notification.create({
             audience: 'admin',
