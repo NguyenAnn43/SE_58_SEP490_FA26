@@ -19,7 +19,12 @@ connectDB();
 // 3. ROUTES DECLARATION
 // ==========================================
 const authRoutes = require("./routes/authRoutes");
+const notificationRoutes = require('./routes/notificationRoutes');
+
 app.use("/api/auth", authRoutes);
+app.use('/api/notifications', notificationRoutes);
+
+
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
