@@ -92,6 +92,49 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+
+// ==========================================
+// API ĐẶT LẠI MẬT KHẨU
+// ==========================================
+const resetPassword = async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || String(resetToken).trim().length !== 6) {
+      return res.status(400).json({ message: 'Mã xác nhận phải gồm 6 chữ số.' });
+    }
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(String(resetToken).trim()).digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    }).select('+password +resetPasswordToken +resetPasswordExpire');
+
+    if (!user) {
+      return res.status(400).json({ message: 'Mã xác nhận không hợp lệ hoặc đã hết hạn (15 phút).' });
+    }
+
+    if (!PARTNER_RESET_ROLES.includes(user.role)) {
+      return res.status(403).json({ message: 'Không thể đặt lại mật khẩu cho loại tài khoản này.' });
+    }
+
+    // KHÔNG cần băm password thủ công, chỉ cần gán và save, Model sẽ tự xử lý
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    res.json({ message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập lại.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi khi đặt lại mật khẩu', error: error.message });
+  }
+};
+
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -223,4 +266,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, googleLogin, logout ,register,forgotPassword  };
+module.exports = { login, googleLogin, logout ,register,forgotPassword,resetPassword };
