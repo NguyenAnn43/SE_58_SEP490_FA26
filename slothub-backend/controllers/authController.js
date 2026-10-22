@@ -1,12 +1,39 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
-
+const { notifyAdmin } = require("../utils/adminNotify");
 const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 },
     process.env.JWT_SECRET,
     { expiresIn: "7d" },
   );
+};
+  
+// ==========================================
+// 1. API ĐĂNG KÝ (REGISTER)
+// ==========================================
+const register = async (req, res) => {
+   
+  try {
+    const { email, password, name, phone } = req.body; 
+    const userExists = await User.findOne({ email });
+    if (userExists) return res.status(400).json({ message: 'Email này đã được sử dụng!' });
+
+    // KHÔNG cần dùng bcrypt ở đây nữa, Model sẽ tự băm password thông qua pre('save')
+    const newUser = new User({ email, password, name, phone });
+    await newUser.save();
+
+    await notifyAdmin(req, {
+      title: 'Tài khoản mới đăng ký',
+      message: `${name || email} vừa đăng ký tài khoản (${email})`,
+      type: 'NEW_USER',
+      actionLink: 'users'
+    });
+
+    res.status(201).json({ message: '🎉 Đăng ký tài khoản SlotHub thành công!' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
 };
 
 const login = async (req, res) => {
@@ -140,4 +167,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { login, googleLogin, logout };
+module.exports = { login, googleLogin, logout ,register  };
