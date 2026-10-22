@@ -29,7 +29,7 @@ router.post("/resetpassword", resetPassword);
 // router.post("/register-vendor", registerVendor);
 
 // === CÁC ROUTE BẮT BUỘC ĐĂNG NHẬP (Lấy/Sửa Profile) ===
-// router.get("/profile", protect, getMyProfile);
-// router.put("/profile", protect, updateProfile);
+router.get("/profile", protect, getMyProfile);
+router.put("/profile", protect, updateProfile);
 
 module.exports = router;
