@@ -20,13 +20,13 @@ const {
 
 // === CÁC ROUTE KHÔNG CẦN ĐĂNG NHẬP ===
 router.post("/register", register);
-// router.post("/login", login);
-// router.post("/google", googleLogin);
+router.post("/login", login);
+router.post("/google", googleLogin);
 router.post("/forgotpassword", forgotPassword); 
 router.post("/resetpassword", resetPassword);
 
 // 🌟 ROUTE MỚI: Mở cổng Đăng ký gian hàng
-// router.post("/register-vendor", registerVendor);
+router.post("/register-vendor", registerVendor);
 
 // === CÁC ROUTE BẮT BUỘC ĐĂNG NHẬP (Lấy/Sửa Profile) ===
 router.get("/profile", protect, getMyProfile);

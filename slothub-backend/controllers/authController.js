@@ -134,7 +134,7 @@ const resetPassword = async (req, res) => {
   }
 };
 
-
+// login by email/password 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -203,6 +203,8 @@ const login = async (req, res) => {
   }
 };
 
+
+/// login by google 
 const googleLogin = async (req, res) => {
   try {
     const { access_token: accessToken } = req.body;
@@ -265,5 +267,49 @@ const logout = async (req, res) => {
       .json({ message: "Lỗi khi đăng xuất.", error: error.message });
   }
 };
+// ==========================================
+// . API ĐĂNG KÝ QUẦY (VENDOR)
+// ==========================================
+const registerVendor = async (req, res) => {
+  try {
+    const { name, vendorName, email, password } = req.body;
 
-module.exports = { login, googleLogin, logout ,register,forgotPassword,resetPassword };
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: 'Email này đã được đăng ký trong hệ thống!' });
+    }
+
+    // 🌟 KHÔNG CẦN BĂM MẬT KHẨU THỦ CÔNG - TẠO USER ÉP CỜ CHỜ DUYỆT
+    const newOwner = new User({
+      name,
+      email,
+      password, // Chuyển thẳng, Model lo băm
+      role: 'vendor_owner',
+      isApproved: false 
+    });
+    await newOwner.save();
+
+    const { normalizeTimeString } = require('../utils/timeFormat');
+    const newVendor = new Vendor({
+      name: vendorName,
+      owner: newOwner._id,
+      openTime: normalizeTimeString(req.body.openTime, '07:00'),
+      closeTime: normalizeTimeString(req.body.closeTime, '21:00'),
+      category: req.body.category || 'Cơm'
+    });
+    await newVendor.save();
+
+    await notifyAdmin(req, {
+      title: 'Quầy mới chờ duyệt',
+      message: `${name} đăng ký gian hàng "${vendorName}" (${email})`,
+      type: 'NEW_VENDOR',
+      actionLink: 'vendors'
+    });
+
+    res.status(201).json({ message: '🎉 Đăng ký mở quầy thành công!' });
+  } catch (error) {
+    console.error("Lỗi đăng ký quầy:", error);
+    res.status(500).json({ message: 'Lỗi hệ thống khi tạo quầy', error: error.message });
+  }
+};
+module.exports = { login, googleLogin, logout ,register,forgotPassword,resetPassword , registerVendor};
