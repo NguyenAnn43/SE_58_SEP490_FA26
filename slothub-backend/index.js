@@ -19,7 +19,15 @@ connectDB();
 // 3. ROUTES DECLARATION
 // ==========================================
 const authRoutes = require("./routes/authRoutes");
+const notificationRoutes = require('./routes/notificationRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+
+
+app.use('/api/reviews', reviewRoutes);
 app.use("/api/auth", authRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/messages', messageRoutes);
 
 const vendorRoutes = require("./routes/vendorRoutes");
 app.use("/api/vendor", vendorRoutes);

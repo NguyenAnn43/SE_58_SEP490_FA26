@@ -1,6 +1,6 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
-
+const { notifyAdmin } = require("../utils/adminNotify");
 const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 },
@@ -8,7 +8,133 @@ const generateToken = (user) => {
     { expiresIn: "7d" },
   );
 };
+  
+// ==========================================
+// 1. API ĐĂNG KÝ (REGISTER)
+// ==========================================
+const register = async (req, res) => {
+   
+  try {
+    const { email, password, name, phone } = req.body; 
+    const userExists = await User.findOne({ email });
+    if (userExists) return res.status(400).json({ message: 'Email này đã được sử dụng!' });
 
+    // KHÔNG cần dùng bcrypt ở đây nữa, Model sẽ tự băm password thông qua pre('save')
+    const newUser = new User({ email, password, name, phone });
+    await newUser.save();
+
+    await notifyAdmin(req, {
+      title: 'Tài khoản mới đăng ký',
+      message: `${name || email} vừa đăng ký tài khoản (${email})`,
+      type: 'NEW_USER',
+      actionLink: 'users'
+    });
+
+    res.status(201).json({ message: '🎉 Đăng ký tài khoản SlotHub thành công!' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
+// ==========================================
+//  API QUÊN MẬT KHẨU (Gửi mã OTP 6 số)
+// ==========================================
+const PARTNER_RESET_ROLES = ['vendor', 'vendor_owner', 'admin'];
+
+const forgotPassword = async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: 'Vui lòng nhập email đăng nhập!' });
+    }
+
+    const user = await User.findOne({ email: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') })
+      .select('+password +resetPasswordToken +resetPasswordExpire');
+
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản đối tác với email này.' });
+    }
+
+    if (user.role === 'student') {
+      return res.status(400).json({ message: 'Tài khoản khách hàng đăng nhập bằng Google, không dùng mật khẩu email.' });
+    }
+
+    if (!PARTNER_RESET_ROLES.includes(user.role)) {
+      return res.status(403).json({ message: 'Loại tài khoản này không hỗ trợ khôi phục mật khẩu qua email.' });
+    }
+
+    if (!user.password) {
+      return res.status(400).json({ message: 'Tài khoản chưa có mật khẩu. Vui lòng liên hệ Admin để được cấp lại.' });
+    }
+
+    // Tạo mã OTP 6 chữ số
+    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+    
+    // Lưu lại bỏ qua validate để update token mượt hơn
+    await user.save({ validateBeforeSave: false });
+
+    const roleLabel = user.role === 'admin' ? 'Quản trị' : 'Chủ quầy';
+    const message = `Chào ${user.name || 'bạn'},\n\nBạn vừa yêu cầu khôi phục mật khẩu SlotHub (${roleLabel}).\n\nMã xác nhận: ${resetToken}\n\nMã có hiệu lực 15 phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.`;
+
+    await sendEmail({
+      email: user.email,
+      subject: 'Mã khôi phục mật khẩu SlotHub — Chủ quầy / Admin',
+      message
+    });
+
+    res.json({ message: 'Đã gửi mã 6 số vào email của bạn. Vui lòng kiểm tra hộp thư (cả thư rác).' });
+  } catch (error) {
+    console.error('forgotPassword:', error);
+    res.status(500).json({ message: 'Lỗi khi gửi email. Kiểm tra cấu hình EMAIL_USER / EMAIL_PASS trên server.' });
+  }
+};
+
+
+// ==========================================
+// API ĐẶT LẠI MẬT KHẨU
+// ==========================================
+const resetPassword = async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || String(resetToken).trim().length !== 6) {
+      return res.status(400).json({ message: 'Mã xác nhận phải gồm 6 chữ số.' });
+    }
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(String(resetToken).trim()).digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    }).select('+password +resetPasswordToken +resetPasswordExpire');
+
+    if (!user) {
+      return res.status(400).json({ message: 'Mã xác nhận không hợp lệ hoặc đã hết hạn (15 phút).' });
+    }
+
+    if (!PARTNER_RESET_ROLES.includes(user.role)) {
+      return res.status(403).json({ message: 'Không thể đặt lại mật khẩu cho loại tài khoản này.' });
+    }
+
+    // KHÔNG cần băm password thủ công, chỉ cần gán và save, Model sẽ tự xử lý
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    res.json({ message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập lại.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi khi đặt lại mật khẩu', error: error.message });
+  }
+};
+
+// login by email/password 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -77,6 +203,8 @@ const login = async (req, res) => {
   }
 };
 
+
+/// login by google 
 const googleLogin = async (req, res) => {
   try {
     const { access_token: accessToken } = req.body;
@@ -139,5 +267,49 @@ const logout = async (req, res) => {
       .json({ message: "Lỗi khi đăng xuất.", error: error.message });
   }
 };
+// ==========================================
+// . API ĐĂNG KÝ QUẦY (VENDOR)
+// ==========================================
+const registerVendor = async (req, res) => {
+  try {
+    const { name, vendorName, email, password } = req.body;
 
-module.exports = { login, googleLogin, logout };
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: 'Email này đã được đăng ký trong hệ thống!' });
+    }
+
+    // 🌟 KHÔNG CẦN BĂM MẬT KHẨU THỦ CÔNG - TẠO USER ÉP CỜ CHỜ DUYỆT
+    const newOwner = new User({
+      name,
+      email,
+      password, // Chuyển thẳng, Model lo băm
+      role: 'vendor_owner',
+      isApproved: false 
+    });
+    await newOwner.save();
+
+    const { normalizeTimeString } = require('../utils/timeFormat');
+    const newVendor = new Vendor({
+      name: vendorName,
+      owner: newOwner._id,
+      openTime: normalizeTimeString(req.body.openTime, '07:00'),
+      closeTime: normalizeTimeString(req.body.closeTime, '21:00'),
+      category: req.body.category || 'Cơm'
+    });
+    await newVendor.save();
+
+    await notifyAdmin(req, {
+      title: 'Quầy mới chờ duyệt',
+      message: `${name} đăng ký gian hàng "${vendorName}" (${email})`,
+      type: 'NEW_VENDOR',
+      actionLink: 'vendors'
+    });
+
+    res.status(201).json({ message: '🎉 Đăng ký mở quầy thành công!' });
+  } catch (error) {
+    console.error("Lỗi đăng ký quầy:", error);
+    res.status(500).json({ message: 'Lỗi hệ thống khi tạo quầy', error: error.message });
+  }
+};
+module.exports = { login, googleLogin, logout ,register,forgotPassword,resetPassword , registerVendor};

@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 
 const vendorSchema = new mongoose.Schema({
-    name: { type: String, required: true }, 
-    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, 
+    name: { type: String, required: true },
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     description: { type: String },
-    imageUrl: { type: String }, 
+    imageUrl: { type: String },
     isActive: { type: Boolean, default: true },
     /** Chủ quầy tự tắt tạm (bận/vắng) — khác với isActive do Admin khóa */
     isPaused: { type: Boolean, default: false },
