@@ -29,8 +29,29 @@ app.use("/api/auth", authRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 
+const vendorRoutes = require("./routes/vendorRoutes");
+app.use("/api/vendor", vendorRoutes);
 
+const menuItemRoutes = require("./routes/menuItemRoutes");
+app.use("/api/menuitems", menuItemRoutes);
 
+const timeSlotRoutes = require("./routes/timeSlotRoutes");
+app.use("/api/timeslots", timeSlotRoutes);
+
+const cartRoutes = require("./routes/cartRoutes");
+app.use("/api/cart", cartRoutes);
+
+const chatRoutes = require("./routes/chatRoutes");
+app.use("/api/chat", chatRoutes);
+
+const orderRoutes = require("./routes/orderRoutes");
+app.use("/api/orders", orderRoutes);
+
+const paymentRoutes = require("./routes/paymentRoutes");
+app.use("/api/payment", paymentRoutes);
+
+const transactionRoutes = require("./routes/transactionRoutes");
+app.use("/api/transactions", transactionRoutes);
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================

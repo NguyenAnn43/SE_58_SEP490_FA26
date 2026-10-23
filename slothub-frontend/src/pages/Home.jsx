@@ -2,12 +2,13 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
-import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy } from 'lucide-react';
+import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy, Clock } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo'; 
 import WalletWidget from '../components/WalletWidget';
 import Footer from '../components/Footer';
 import FoodCard from '../components/FoodCard';
 import FoodDetailModal from '../components/FoodDetailModal';
+import { CART_UPDATED_EVENT } from '../components/ChatWidget';
 import PickupSlotFilter from '../components/PickupSlotFilter';
 import VendorStallFilter from '../components/VendorStallFilter';
 import { pickDefaultSlotId, MENU_VIEW_SLOT_STORAGE_KEY } from '../utils/vendorHours';
@@ -18,7 +19,15 @@ const CATEGORY_ALL = 'Tất cả';
 
 const normalizeStr = (str) => {
   if (!str) return '';
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    // Bộ gõ tiếng Việt có thể chèn dấu cách đặc biệt (NBSP) / nhiều dấu cách
+    .replace(/[\s\u00a0\u200b]+/g, ' ')
+    .trim();
 };
 
 const Home = () => {
@@ -40,6 +49,17 @@ const Home = () => {
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [allVendors, setAllVendors] = useState([]);
   const [hideClosedForSlot, setHideClosedForSlot] = useState(true);
+  /** Quầy đang mở rộng để xem món (mặc định thu gọn hết) */
+  const [expandedVendorIds, setExpandedVendorIds] = useState(() => new Set());
+
+  const toggleVendorExpanded = (vendorId) => {
+    setExpandedVendorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vendorId)) next.delete(vendorId);
+      else next.add(vendorId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (user?.role === 'admin') navigate('/admin', { replace: true });
@@ -91,6 +111,15 @@ const Home = () => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ reload khi đổi user id / ví
   }, [user?._id, fetchBalance]);
+
+  // Thêm món từ chatbot SlotAI → cập nhật icon giỏ hàng ngay
+  useEffect(() => {
+    const onCartUpdated = (e) => {
+      if (e.detail?.items) setCart(e.detail);
+    };
+    window.addEventListener(CART_UPDATED_EVENT, onCartUpdated);
+    return () => window.removeEventListener(CART_UPDATED_EVENT, onCartUpdated);
+  }, []);
 
   const handleSlotChange = async (slotId) => {
     setSelectedSlotId(slotId);
@@ -182,15 +211,11 @@ const Home = () => {
     const matchVendor = !selectedVendorId || vendorId === selectedVendorId;
     const matchSlot = !selectedSlotId || !hideClosedForSlot || item.vendorIsOpen !== false;
 
-    const searchClean = normalizeStr(searchTerm);
-    const nameClean = normalizeStr(item.name);
-    const vendorClean = normalizeStr(item.vendor?.name);
-    const categoryClean = normalizeStr(item.category);
-    const matchSearch =
-      !searchTerm.trim() ||
-      nameClean.includes(searchClean) ||
-      vendorClean.includes(searchClean) ||
-      categoryClean.includes(searchClean);
+    // Tìm theo từng từ: món khớp khi chứa đủ mọi từ khóa (ở tên món, tên quầy hoặc danh mục)
+    // VD "cơm gà", "gà cơm", "com  ga" đều ra "Cơm Gà Nướng"
+    const searchWords = normalizeStr(searchTerm).split(' ').filter(Boolean);
+    const haystack = [item.name, item.vendor?.name, item.category].map(normalizeStr).join(' ');
+    const matchSearch = searchWords.every((w) => haystack.includes(w));
 
     return matchCategory && matchVendor && matchSlot && matchSearch;
   });
@@ -532,7 +557,7 @@ const Home = () => {
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 px-6 py-5 rounded-[2rem] shadow-sm animate-in fade-in duration-300">
                 <p className="text-gray-700 font-medium text-lg">Kết quả cho: <span className="font-black text-[#F27124]">"{searchTerm}"</span></p>
                 <span className="bg-orange-50 text-[#D95F1B] text-sm font-extrabold px-4 py-2 rounded-full mt-2 sm:mt-0 shadow-sm border border-orange-100 flex items-center gap-2">
-                  <Search size={16}/> {filteredItems.length} {t('home.resultsCount')}
+                  <Search size={16}/> {t('home.resultsCount', { count: filteredItems.length })}
                 </span>
             </div>
           )}
@@ -548,18 +573,36 @@ const Home = () => {
 
           {/* ================= GIAO DIỆN NHÓM THEO QUÁN (VENDOR FRAMES) ================= */}
           {groupedItems.length > 0 ? (
-            <div className="space-y-10">
-              {groupedItems.map(group => (
-                <div key={group.id} className="bg-white rounded-[2.5rem] p-6 lg:p-8 shadow-sm border border-gray-100 animate-in fade-in duration-500">
-                  
-                  {/* HEADER QUÁN */}
-                  <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-gray-100">
-                    <div className="flex items-center gap-4">
+            <div className="space-y-5">
+              {groupedItems.map(group => {
+                // Đang tìm kiếm / lọc 1 quầy thì mở sẵn để không giấu kết quả
+                const isExpanded = Boolean(searchTerm.trim()) || Boolean(selectedVendorId) || expandedVendorIds.has(group.id);
+                const firstItem = group.items[0];
+                const vendorHours = firstItem?.vendor?.openTime && firstItem?.vendor?.closeTime
+                  ? `${firstItem.vendor.openTime} – ${firstItem.vendor.closeTime}`
+                  : '';
+                const previewItems = group.items.filter((i) => i.imageUrl).slice(0, 4);
+                return (
+                <div
+                  key={group.id}
+                  className={`bg-white rounded-[2rem] shadow-sm border transition-all duration-300 animate-in fade-in ${
+                    isExpanded ? 'p-6 lg:p-8 border-orange-100' : 'p-4 lg:p-5 border-gray-100 hover:border-orange-200 hover:shadow-md'
+                  }`}
+                >
+
+                  {/* HEADER QUÁN — bấm để mở/thu gọn danh sách món */}
+                  <button
+                    type="button"
+                    onClick={() => toggleVendorExpanded(group.id)}
+                    aria-expanded={isExpanded}
+                    className={`w-full flex items-center justify-between gap-3 text-left ${isExpanded ? 'mb-6 pb-4 border-b border-gray-100' : ''}`}
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
                       <div className="bg-gradient-to-br from-[#F27124] to-[#D95F1B] p-3 rounded-2xl text-white shadow-md shadow-orange-500/20">
                         <Store size={24} />
                       </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-black text-gray-900">{group.name}</h3>
+                      <div className="min-w-0">
+                        <h3 className="text-lg md:text-2xl font-black text-gray-900 truncate">{group.name}</h3>
                         
                         {/* Hiển thị Thông số của Quán */}
                         <div className="flex items-center flex-wrap gap-2 md:gap-3 mt-1.5">
@@ -576,14 +619,44 @@ const Home = () => {
                           ) : (
                             <span className="text-xs font-medium text-gray-400">Chưa có đánh giá</span>
                           )}
+
+                          {vendorHours && (
+                            <span className="flex items-center gap-1 text-xs font-bold text-gray-500">
+                              <Clock size={12} /> {vendorHours}
+                            </span>
+                          )}
                         </div>
-                        
+
                       </div>
                     </div>
-                  </div>
 
-                  {/* LƯỚI MÓN ĂN CỦA QUÁN ĐÓ */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-7">
+                    <div className="flex items-center gap-3 shrink-0">
+                      {/* Ảnh xem trước vài món khi đang thu gọn */}
+                      {!isExpanded && previewItems.length > 0 && (
+                        <div className="hidden sm:flex -space-x-3">
+                          {previewItems.map((p) => (
+                            <img
+                              key={p._id}
+                              src={p.imageUrl}
+                              alt={p.name}
+                              className="w-11 h-11 rounded-xl object-cover border-2 border-white shadow-sm bg-gray-100"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <span className={`flex items-center gap-1.5 text-xs font-black px-3 py-2 rounded-xl transition-colors ${
+                        isExpanded ? 'bg-gray-100 text-gray-600' : 'bg-orange-50 text-[#F27124]'
+                      }`}>
+                        <span className="hidden sm:inline">{isExpanded ? 'Thu gọn' : 'Xem món'}</span>
+                        <ChevronDown size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* LƯỚI MÓN ĂN CỦA QUÁN ĐÓ — chỉ hiện khi mở rộng */}
+                  {isExpanded && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-7 animate-in fade-in duration-300">
                     {group.items.map((item) => (
                       <FoodCard
                         key={item._id}
@@ -593,9 +666,11 @@ const Home = () => {
                       />
                     ))}
                   </div>
-                  
+                  )}
+
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
              <div className="bg-white py-24 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
