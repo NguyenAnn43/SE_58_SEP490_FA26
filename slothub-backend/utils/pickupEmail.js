@@ -22,7 +22,7 @@ const buildOrderBlock = (order, vendorName) => {
   const expiresAt = getPickupCodeExpiresAt(order);
   const expiresText = expiresAt
     ? expiresAt.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
-    : '2 giờ kể từ khi thanh toán';
+    : '30 phút sau khi hết khung giờ nhận';
 
   const itemsHtml = (order.items || [])
     .map((item) => {

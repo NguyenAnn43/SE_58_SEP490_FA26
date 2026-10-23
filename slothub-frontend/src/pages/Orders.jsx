@@ -14,7 +14,8 @@ import { connectUserSocket } from '../utils/socket';
 import {
   isPickupCodeExpired,
   getPickupCodeRemainingMs,
-  formatRemainingTime
+  formatRemainingTime,
+  formatPickupCodeExpiry
 } from '../utils/pickupCode';
 
 const Orders = () => {
@@ -317,7 +318,7 @@ const Orders = () => {
                       order.status !== 'Cancelled' &&
                       pickupExpired && (
                       <span className="text-xs font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">
-                        Mã nhận món đã hết hạn (2h)
+                        Mã nhận món đã hết hạn
                       </span>
                     )}
                     
@@ -374,12 +375,13 @@ const Orders = () => {
             <h3 className="text-2xl font-black text-gray-800 mb-1">Mã nhận món</h3>
             {isPickupCodeExpired(selectedOrderQR) ? (
               <p className="text-red-500 text-sm mb-6 text-center font-bold px-2">
-                Mã đã hết hạn sau 2 giờ kể từ khi thanh toán. Vui lòng liên hệ quầy.
+                Mã đã hết hạn (quá 30 phút sau khung giờ nhận). Vui lòng liên hệ quầy.
               </p>
             ) : (
               <>
             <p className="text-gray-500 text-sm mb-3 text-center font-medium px-2">
-              Đưa mã này cho chủ quầy quét trong vòng <strong className="text-[#F27124]">2 giờ</strong>.
+              Đưa mã này cho chủ quầy quét trong khung giờ <strong className="text-[#F27124]">{selectedOrderQR.pickupSlot}</strong>.
+              Mã có hiệu lực đến <strong className="text-[#F27124]">{formatPickupCodeExpiry(selectedOrderQR)}</strong>.
             </p>
             <p className="flex items-center gap-2 text-sm font-black text-[#F27124] bg-orange-50 border border-orange-100 px-4 py-2 rounded-full mb-6 flex-wrap justify-center">
               <Timer size={16} />

@@ -147,7 +147,7 @@ const en = {
     qrHint: 'Show this QR or OTP to the vendor',
     otp: 'OTP code',
     expiresIn: 'Expires in',
-    expired: 'Code expired (2 hours after payment)',
+    expired: 'Code expired (30 minutes after the pickup slot)',
     pickupSlot: 'Pickup slot',
     vendor: 'Stall',
     total: 'Total',

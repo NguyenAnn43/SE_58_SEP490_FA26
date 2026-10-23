@@ -147,7 +147,7 @@ const vi = {
     qrHint: 'Đưa mã QR hoặc OTP cho chủ quầy quét',
     otp: 'Mã OTP',
     expiresIn: 'Hết hạn sau',
-    expired: 'Mã đã hết hạn (2 giờ sau thanh toán)',
+    expired: 'Mã đã hết hạn (quá 30 phút sau khung giờ nhận)',
     pickupSlot: 'Khung giờ nhận',
     vendor: 'Quầy',
     total: 'Tổng tiền',
