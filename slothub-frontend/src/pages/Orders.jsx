@@ -10,6 +10,7 @@ import {
 import { useLocale } from '../context/LocaleContext';
 import LanguageToggle from '../components/LanguageToggle';
 import { appAlert } from '../utils/appAlert';
+import { connectUserSocket } from '../utils/socket';
 import {
   isPickupCodeExpired,
   getPickupCodeRemainingMs,
@@ -69,6 +70,31 @@ const Orders = () => {
     const res = await api.get('/orders/my-orders');
     setOrders(res.data);
   };
+
+  // Realtime: quầy chuyển đơn "Sẵn sàng" / quét QR-OTP xác nhận đã nhận món → cập nhật ngay
+  useEffect(() => {
+    const userId = user?._id || user?.id;
+    if (!userId) return undefined;
+    const s = connectUserSocket(userId);
+
+    const onStudentNotification = (noti) => {
+      if (!noti?.orderId) return;
+      api.get('/orders/my-orders').then((res) => setOrders(res.data)).catch(() => {});
+
+      if (noti.type === 'ORDER_COMPLETED') {
+        // Đóng popup mã nhận món của đúng đơn vừa được quét
+        setSelectedOrderQR((prev) => (prev && String(prev._id) === String(noti.orderId) ? null : prev));
+        appAlert(noti.message, { type: 'success', title: `✅ ${noti.title}` });
+      } else if (noti.type === 'ORDER_READY') {
+        appAlert(noti.message, { type: 'info', title: `🔔 ${noti.title}` });
+      }
+    };
+
+    s.on('student_notification', onStudentNotification);
+    return () => {
+      s.off('student_notification', onStudentNotification);
+    };
+  }, [user]);
 
   const openCancelModal = async (order) => {
     setCancelOrder(order);
