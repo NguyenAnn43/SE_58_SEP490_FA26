@@ -19,6 +19,10 @@ const menuItemSchema = new mongoose.Schema({
     
     // Sức khỏe
     calories: { type: Number, min: 0 }, 
+    // Dinh dưỡng thêm (gram/phần) — tuỳ chọn, chatbot dùng khi khách hỏi "nhiều protein"...
+    protein: { type: Number, min: 0 },
+    carbs: { type: Number, min: 0 },
+    fat: { type: Number, min: 0 },
     
     // Kho
     countInStock: { type: Number, default: 50, min: 0 }, 

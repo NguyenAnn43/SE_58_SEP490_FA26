@@ -8,6 +8,7 @@ import WalletWidget from '../components/WalletWidget';
 import Footer from '../components/Footer';
 import FoodCard from '../components/FoodCard';
 import FoodDetailModal from '../components/FoodDetailModal';
+import { CART_UPDATED_EVENT } from '../components/ChatWidget';
 import PickupSlotFilter from '../components/PickupSlotFilter';
 import VendorStallFilter from '../components/VendorStallFilter';
 import { pickDefaultSlotId, MENU_VIEW_SLOT_STORAGE_KEY } from '../utils/vendorHours';
@@ -110,6 +111,15 @@ const Home = () => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ reload khi đổi user id / ví
   }, [user?._id, fetchBalance]);
+
+  // Thêm món từ chatbot SlotAI → cập nhật icon giỏ hàng ngay
+  useEffect(() => {
+    const onCartUpdated = (e) => {
+      if (e.detail?.items) setCart(e.detail);
+    };
+    window.addEventListener(CART_UPDATED_EVENT, onCartUpdated);
+    return () => window.removeEventListener(CART_UPDATED_EVENT, onCartUpdated);
+  }, []);
 
   const handleSlotChange = async (slotId) => {
     setSelectedSlotId(slotId);
