@@ -20,9 +20,13 @@ connectDB();
 // ==========================================
 const authRoutes = require("./routes/authRoutes");
 const notificationRoutes = require('./routes/notificationRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+
 
 app.use("/api/auth", authRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/messages', messageRoutes);
+
 
 
 // ==========================================
