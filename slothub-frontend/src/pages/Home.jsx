@@ -18,7 +18,15 @@ const CATEGORY_ALL = 'Tất cả';
 
 const normalizeStr = (str) => {
   if (!str) return '';
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    // Bộ gõ tiếng Việt có thể chèn dấu cách đặc biệt (NBSP) / nhiều dấu cách
+    .replace(/[\s\u00a0\u200b]+/g, ' ')
+    .trim();
 };
 
 const Home = () => {
@@ -193,15 +201,11 @@ const Home = () => {
     const matchVendor = !selectedVendorId || vendorId === selectedVendorId;
     const matchSlot = !selectedSlotId || !hideClosedForSlot || item.vendorIsOpen !== false;
 
-    const searchClean = normalizeStr(searchTerm);
-    const nameClean = normalizeStr(item.name);
-    const vendorClean = normalizeStr(item.vendor?.name);
-    const categoryClean = normalizeStr(item.category);
-    const matchSearch =
-      !searchTerm.trim() ||
-      nameClean.includes(searchClean) ||
-      vendorClean.includes(searchClean) ||
-      categoryClean.includes(searchClean);
+    // Tìm theo từng từ: món khớp khi chứa đủ mọi từ khóa (ở tên món, tên quầy hoặc danh mục)
+    // VD "cơm gà", "gà cơm", "com  ga" đều ra "Cơm Gà Nướng"
+    const searchWords = normalizeStr(searchTerm).split(' ').filter(Boolean);
+    const haystack = [item.name, item.vendor?.name, item.category].map(normalizeStr).join(' ');
+    const matchSearch = searchWords.every((w) => haystack.includes(w));
 
     return matchCategory && matchVendor && matchSlot && matchSearch;
   });
@@ -543,7 +547,7 @@ const Home = () => {
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 px-6 py-5 rounded-[2rem] shadow-sm animate-in fade-in duration-300">
                 <p className="text-gray-700 font-medium text-lg">Kết quả cho: <span className="font-black text-[#F27124]">"{searchTerm}"</span></p>
                 <span className="bg-orange-50 text-[#D95F1B] text-sm font-extrabold px-4 py-2 rounded-full mt-2 sm:mt-0 shadow-sm border border-orange-100 flex items-center gap-2">
-                  <Search size={16}/> {filteredItems.length} {t('home.resultsCount')}
+                  <Search size={16}/> {t('home.resultsCount', { count: filteredItems.length })}
                 </span>
             </div>
           )}
