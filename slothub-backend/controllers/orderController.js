@@ -69,7 +69,8 @@ const processVendorGroup = async (cartItems, slotOpts) => {
         processedItems.push({
             menuItem: itemDb._id,
             quantity: cartItem.quantity,
-            price: itemDb.price
+            price: itemDb.price,
+            ...(itemDb.calories != null && { calories: itemDb.calories })
         });
     }
 
@@ -92,7 +93,7 @@ const removeProcessedCartItems = async (cart, processedMenuItemIds) => {
 };
 
 // 1. [POST] Sinh viên đặt đồ ăn (hỗ trợ chọn món + nhiều quầy)
-const createOrder = async (req, res) => {
+const createOrderCore = async (req, res, idempotencyKey) => {
     try {
         const { paymentMethod, note, pickupSlot, pickupDate, selectedMenuItemIds } = req.body;
         const userId = req.user.id;
@@ -175,7 +176,8 @@ const createOrder = async (req, res) => {
                     status: 'Processing',
                     paymentStatus: 'Paid',
                     paymentMethod: 'wallet',
-                    checkoutBatchId
+                    checkoutBatchId,
+                    idempotencyKey: idempotencyKey || undefined
                 });
                 issuePickupCode(newOrder);
                 await newOrder.save();
@@ -246,7 +248,8 @@ const createOrder = async (req, res) => {
                     status: 'Pending',
                     paymentStatus: 'Unpaid',
                     paymentMethod: 'payos',
-                    checkoutBatchId
+                    checkoutBatchId,
+                    idempotencyKey: idempotencyKey || undefined
                 });
                 await newOrder.save();
                 vendorNames[String(group.vendorId)] = group.vendor?.name || 'Quầy căng tin';
@@ -282,6 +285,45 @@ const createOrder = async (req, res) => {
 
     } catch (error) {
         res.status(500).json({ message: 'Lỗi tạo đơn', error: error.message });
+    }
+};
+
+// Khoá chống tạo đơn trùng: request đang xử lý (trong tiến trình) + tra DB theo idempotencyKey
+const inFlightOrderKeys = new Set();
+
+const createOrder = async (req, res) => {
+    const raw = req.body?.idempotencyKey;
+    const idempotencyKey = typeof raw === 'string' ? raw.trim().slice(0, 100) : '';
+    if (!idempotencyKey) return createOrderCore(req, res, '');
+
+    const userId = String(req.user.id);
+    try {
+        const existing = await Order.find({ user: userId, idempotencyKey })
+            .populate('vendor', 'name')
+            .populate('items.menuItem', 'name price imageUrl');
+        if (existing.length) {
+            return res.status(200).json({
+                message: 'Đơn này đã được tạo trước đó (không tạo trùng).',
+                duplicate: true,
+                orders: existing,
+                order: existing[0],
+                checkoutBatchId: existing[0].checkoutBatchId,
+                isPayOS: existing[0].paymentMethod === 'payos'
+            });
+        }
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi kiểm tra đơn trùng', error: error.message });
+    }
+
+    const lockKey = `${userId}:${idempotencyKey}`;
+    if (inFlightOrderKeys.has(lockKey)) {
+        return res.status(409).json({ message: 'Đơn đang được xử lý, vui lòng đợi trong giây lát.' });
+    }
+    inFlightOrderKeys.add(lockKey);
+    try {
+        return await createOrderCore(req, res, idempotencyKey);
+    } finally {
+        inFlightOrderKeys.delete(lockKey);
     }
 };
 

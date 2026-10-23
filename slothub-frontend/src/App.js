@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { LocaleProvider } from './context/LocaleContext';
+import { AppAlertProvider } from './context/AppAlertProvider';
 import { GoogleOAuthProvider } from '@react-oauth/google'; 
 import './App.css'; 
 import './index.css'; 
@@ -84,6 +85,8 @@ function App() {
     <GoogleOAuthProvider clientId="583792662650-dvoaqprusu2f1ueef2rdl8bsb46i5j76.apps.googleusercontent.com">
       <AuthProvider>
         <LocaleProvider>
+        {/* Hộp thông báo dùng chung cho appAlert()/appConfirm() — thiếu provider này thì mọi thông báo bị nuốt mất */}
+        <AppAlertProvider>
         <Router>
           <div className="App font-sans bg-[#F9FAFB] min-h-screen relative">
             <Routes>
@@ -122,6 +125,7 @@ function App() {
             
           </div>
         </Router>
+        </AppAlertProvider>
         </LocaleProvider>
       </AuthProvider>
     </GoogleOAuthProvider>
