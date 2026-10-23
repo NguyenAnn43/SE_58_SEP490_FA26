@@ -5,8 +5,9 @@ import { AuthContext } from '../context/AuthContext';
 import {
   ArrowLeft, Wallet, Receipt, Clock, FileText,
   CheckCircle2, AlertCircle, Loader2, Plus, Minus, Trash2, CreditCard,
-  Sun, CloudSun, Sunset, Moon, Sparkles, QrCode, Store, CheckSquare, Square, Gift
+  Sparkles, QrCode, Store, CheckSquare, Square, Gift
 } from 'lucide-react';
+import { getSlotPeriodIcon, getSlotPeriodLabel } from '../utils/slotPeriod';
 import { PICKUP_SLOT_STORAGE_KEY, PICKUP_DATE_STORAGE_KEY, pickDefaultSlotId, getVendorStatusForSlot, filterSlotsForPickupDate, formatPickupDayLabel, isSlotPastForToday, countTodayPickupSlots } from '../utils/vendorHours';
 import { useLocale } from '../context/LocaleContext';
 import { appAlert } from '../utils/appAlert';
@@ -55,9 +56,7 @@ const Checkout = () => {
   const [cancelPolicy, setCancelPolicy] = useState(null);
   const cartInitialized = React.useRef(false);
 
-  const slotIcons = [<Sun size={20} />, <CloudSun size={20} />, <Sunset size={20} />, <Moon size={20} />];
-  const slotLabelsRaw = t('pickup.slotLabels');
-  const slotLabels = Array.isArray(slotLabelsRaw) ? slotLabelsRaw : ['Bữa sáng', 'Giờ cao điểm', 'Nạp năng lượng', 'Giờ giải lao'];
+  const slotPeriods = t('slotPeriods');
 
   useEffect(() => {
     if (!user) return navigate('/login');
@@ -462,11 +461,11 @@ const Checkout = () => {
                       }`}
                   >
                     <div className={`p-3 rounded-xl mr-4 transition-colors ${isSelected ? 'bg-[#F27124] text-white shadow-lg shadow-orange-500/30' : 'bg-white text-gray-400 border border-gray-200 group-hover:text-[#F27124]'}`}>
-                      {slotIcons[index % slotIcons.length]}
+                      {React.createElement(getSlotPeriodIcon(slot.startTime), { size: 20 })}
                     </div>
                     <div className="flex-1">
                       <p className={`font-black text-lg ${isSelected ? 'text-[#F27124]' : 'text-gray-900'}`}>{slotTime}</p>
-                      <p className={`text-xs font-bold mt-0.5 ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>{slotLabels[index % slotLabels.length]}</p>
+                      <p className={`text-xs font-bold mt-0.5 ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>{getSlotPeriodLabel(slot.startTime, slotPeriods)}</p>
                     </div>
                     {isSelected && (
                       <div className="absolute right-4 text-[#F27124] animate-in zoom-in duration-300">
