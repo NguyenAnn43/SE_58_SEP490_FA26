@@ -7,8 +7,13 @@ const orderSchema = new mongoose.Schema({
     items: [{
         menuItem: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: true },
         quantity: { type: Number, required: true, min: 1 },
-        price: { type: Number, required: true }
+        price: { type: Number, required: true },
+        // Calo/phần tại thời điểm đặt (dữ liệu quầy nhập/AI ước lượng) — giữ đúng lịch sử khi menu đổi
+        calories: { type: Number, min: 0 }
     }],
+
+    // Chống tạo đơn trùng khi gửi lại / thử lại request (VD bấm xác nhận 2 lần trong chatbot)
+    idempotencyKey: { type: String, index: true },
 
     totalPrice: { type: Number, required: true },
     discountAmount: { type: Number, default: 0 },

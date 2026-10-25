@@ -69,11 +69,19 @@ const vi = {
     loginToOrderBtn: 'ĐĂNG NHẬP ĐỂ ĐẶT MÓN',
     dishCount: '{{count}} món',
   },
+  slotPeriods: {
+    breakfast: 'Bữa sáng',
+    earlyLunch: 'Trưa sớm · ít đông',
+    lunchPeak: 'Cao điểm trưa',
+    lateLunch: 'Trưa muộn',
+    afternoon: 'Bữa xế chiều',
+    dinner: 'Bữa tối',
+    lateNight: 'Ăn khuya',
+  },
   menuView: {
     title: 'Khung giờ xem thực đơn',
     hideClosed: 'Ẩn quầy đóng trong khung này',
     hint: 'Lọc theo giờ quầy có thể phục vụ trong khung này (VD 17:30), không phải giờ đang xem web. Quầy đóng lúc 13:30 vẫn có thể mở buổi 17:30 nếu giờ quầy cho phép. Giờ nhận món chọn ở Thanh toán.',
-    slotLabels: ['Bữa sáng', 'Giờ cao điểm', 'Nạp năng lượng', 'Giờ giải lao'],
   },
   pickup: {
     label: 'Khung giờ nhận món hôm nay',
@@ -81,7 +89,6 @@ const vi = {
     title: 'Chọn khung giờ nhận món',
     hideClosed: 'Ẩn quầy đóng trong khung này',
     hint: 'Đây là giờ bạn đến quầy lấy món sau khi thanh toán.',
-    slotLabels: ['Bữa sáng', 'Giờ cao điểm', 'Nạp năng lượng', 'Giờ giải lao'],
   },
   categories: {
     'Cơm': 'Cơm',
@@ -140,7 +147,7 @@ const vi = {
     qrHint: 'Đưa mã QR hoặc OTP cho chủ quầy quét',
     otp: 'Mã OTP',
     expiresIn: 'Hết hạn sau',
-    expired: 'Mã đã hết hạn (2 giờ sau thanh toán)',
+    expired: 'Mã đã hết hạn (quá 30 phút sau khung giờ nhận)',
     pickupSlot: 'Khung giờ nhận',
     vendor: 'Quầy',
     total: 'Tổng tiền',

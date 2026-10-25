@@ -69,11 +69,19 @@ const en = {
     loginToOrderBtn: 'SIGN IN TO ORDER',
     dishCount: '{{count}} dishes',
   },
+  slotPeriods: {
+    breakfast: 'Breakfast',
+    earlyLunch: 'Early lunch · less busy',
+    lunchPeak: 'Lunch rush',
+    lateLunch: 'Late lunch',
+    afternoon: 'Afternoon snack',
+    dinner: 'Dinner',
+    lateNight: 'Late night',
+  },
   menuView: {
     title: 'Menu browsing time slot',
     hideClosed: 'Hide closed stalls in this slot',
     hint: 'Filters by when the stall can serve in this window (e.g. 5:30 PM), not the current clock time. A stall closed at 1:30 PM may still serve a 5:30 PM slot if its hours allow. Pickup time is chosen at checkout.',
-    slotLabels: ['Breakfast', 'Peak hours', 'Afternoon', 'After class'],
   },
   pickup: {
     label: 'Today\'s pickup time slot',
@@ -81,7 +89,6 @@ const en = {
     title: 'Choose pickup time slot',
     hideClosed: 'Hide closed stalls in this slot',
     hint: 'When you will come to the stall to collect your order after payment.',
-    slotLabels: ['Breakfast', 'Peak hours', 'Afternoon', 'After class'],
   },
   categories: {
     'Cơm': 'Rice',
@@ -140,7 +147,7 @@ const en = {
     qrHint: 'Show this QR or OTP to the vendor',
     otp: 'OTP code',
     expiresIn: 'Expires in',
-    expired: 'Code expired (2 hours after payment)',
+    expired: 'Code expired (30 minutes after the pickup slot)',
     pickupSlot: 'Pickup slot',
     vendor: 'Stall',
     total: 'Total',

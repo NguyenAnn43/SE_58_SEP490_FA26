@@ -60,8 +60,14 @@ const assertUniqueStudentBank = async ({
   return { ok: true };
 };
 
+const studentHasBankAccount = (user) => {
+  const b = user?.bankAccount;
+  return Boolean(b?.bankName && b?.accountNumber && b?.accountName);
+};
+
 module.exports = {
   normalizeBankAccount,
   validateStudentBankAccount,
   assertUniqueStudentBank,
+  studentHasBankAccount,
 };

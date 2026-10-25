@@ -1,8 +1,7 @@
 import React from 'react';
-import { Clock, Sun, CloudSun, Sunset, Moon, CheckCircle2 } from 'lucide-react';
+import { Clock, CheckCircle2 } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext';
-
-const SLOT_ICONS = [<Sun key="0" size={18} />, <CloudSun key="1" size={18} />, <Sunset key="2" size={18} />, <Moon key="3" size={18} />];
+import { getSlotPeriodIcon, getSlotPeriodLabel } from '../utils/slotPeriod';
 
 /**
  * @param {'menuView'|'pickup'} variant — menuView: Home (lọc menu); pickup: (nếu dùng chung component)
@@ -20,8 +19,7 @@ const PickupSlotFilter = ({
   const vertical = layout === 'vertical';
   const { t } = useLocale();
   const ns = variant === 'menuView' ? 'menuView' : 'pickup';
-  const slotLabels = t(`${ns}.slotLabels`) || t('pickup.slotLabels');
-  const SLOT_LABELS = Array.isArray(slotLabels) ? slotLabels : ['Bữa sáng', 'Giờ cao điểm', 'Nạp năng lượng', 'Giờ giải lao'];
+  const slotPeriods = t('slotPeriods');
 
   if (!timeSlots?.length) return null;
 
@@ -77,14 +75,14 @@ const PickupSlotFilter = ({
                   isSelected ? 'bg-[#F27124] text-white shadow-md' : 'bg-white text-gray-400 border border-gray-200'
                 }`}
               >
-                {SLOT_ICONS[index % SLOT_ICONS.length]}
+                {React.createElement(getSlotPeriodIcon(slot.startTime), { size: 18 })}
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`font-black text-sm sm:text-base ${isSelected ? 'text-[#F27124]' : 'text-gray-900'}`}>
                   {label}
                 </p>
                 <p className={`text-[10px] sm:text-xs font-bold ${isSelected ? 'text-orange-600' : 'text-gray-500'}`}>
-                  {SLOT_LABELS[index % SLOT_LABELS.length]}
+                  {getSlotPeriodLabel(slot.startTime, slotPeriods)}
                 </p>
               </div>
               {isSelected && <CheckCircle2 size={20} className="text-[#F27124] shrink-0 hidden sm:block" />}

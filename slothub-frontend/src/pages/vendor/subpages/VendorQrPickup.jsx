@@ -136,7 +136,7 @@ const VendorQrPickup = ({ onOrdersRefresh }) => {
           Quét mã nhận món
         </h2>
         <p className={`text-sm mt-2 transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          Khách hàng mở <strong className={isDark ? 'text-white' : 'text-gray-800'}>Mã nhận món</strong> — mã có hiệu lực <strong className={isDark ? 'text-orange-300' : 'text-[#F27124] font-bold'}>2 giờ</strong> sau khi thanh toán.
+          Khách hàng mở <strong className={isDark ? 'text-white' : 'text-gray-800'}>Mã nhận món</strong> — mã có hiệu lực đến <strong className={isDark ? 'text-orange-300' : 'text-[#F27124] font-bold'}>30 phút sau khung giờ nhận</strong> của đơn.
         </p>
       </div>
 
