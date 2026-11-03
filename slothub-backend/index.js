@@ -31,6 +31,8 @@ const chatRoutes = require("./routes/chatRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
+const reportRoutes = require('./routes/reportRoutes');
+
 
 
 
@@ -47,6 +49,8 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use('/api/reports', reportRoutes);
+
 // ==========================================
 // 4. CHẠY SERVER
 // ==========================================
