@@ -1,62 +1,69 @@
 const Order = require('../models/Order');
 const Transaction = require('../models/Transaction');
-const User = require('../models/User');
+const { reverseOrderPayment } = require('../utils/settleOrderPayment');
+const { logOrderStatus, logAudit, notifyStudent } = require('../utils/persistence');
 
-// 1. Logic Hoàn tiền SIÊU VIP (Cộng tiền vào Ví nội bộ)
+// 1. [POST] /api/refunds/:orderId — ADMIN hoàn 100% một đơn đã thanh toán vào ví SlotHub.
+// (Trước đây ai đăng nhập cũng gọi được, và cộng sai trường totalAmount (không tồn tại) → đã khoá lại cho admin,
+//  chiếm đơn nguyên tử để không hoàn 2 lần, dùng chung cơ chế reverseOrderPayment: trừ lại phần quầy + phí sàn.)
 const requestRefund = async (req, res) => {
     try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Chỉ quản trị viên được hoàn tiền thủ công.' });
+        }
         const { orderId } = req.params;
-        const { reason } = req.body;
-        
-        const order = await Order.findById(orderId);
-        if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng!" });
-        
-        if (order.paymentStatus !== 'Paid') {
-            return res.status(400).json({ message: "Đơn hàng chưa thanh toán hoặc đã được hoàn tiền!" });
+        const reason = String(req.body?.reason || '').trim().slice(0, 300) || 'Admin hoàn tiền';
+
+        // Chiếm đơn nguyên tử: 2 request cùng lúc thì chỉ 1 request hoàn được tiền
+        const before = await Order.findOneAndUpdate(
+            { _id: orderId, paymentStatus: 'Paid', status: { $ne: 'Completed' } },
+            {
+                $set: {
+                    status: 'Cancelled', paymentStatus: 'Refunded',
+                    cancelledBy: 'admin', cancelledAt: new Date(), cancelReason: reason,
+                },
+            },
+            { returnDocument: 'before' }
+        );
+        if (!before) {
+            return res.status(409).json({ message: 'Đơn không tồn tại, chưa thanh toán, đã hoàn thành hoặc đã được hoàn tiền.' });
         }
 
-        // BƯỚC 1: CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG
-        order.status = 'Cancelled';
-        order.paymentStatus = 'Refunded';
-        await order.save();
-
-        // BƯỚC 2: CỘNG TIỀN VÀO VÍ NGƯỜI DÙNG (Tăng Wallet Balance)
-        const user = await User.findById(order.user);
-        if (user) {
-            user.walletBalance += order.totalAmount;
-            await user.save();
-        }
-
-        // BƯỚC 3: TẠO TRANSACTION REFUND ĐỂ ĐỐI SOÁT
-        const refundTrans = new Transaction({
-            orderId: order._id,
-            userId: order.user,
-            vendorId: order.vendor,
-            amount: order.totalAmount,
-            type: 'REFUND',
-            status: 'SUCCESS',
-            description: `Hoàn tiền tự động vào ví SlotHub cho đơn #${orderId.slice(-6)}. Lý do: ${reason || 'Hủy đơn'}`
-        });
-        await refundTrans.save();
-
-        // BƯỚC 4: THÔNG BÁO REAL-TIME
-        const io = req.app.get('socketio');
-        if (io) {
-            io.emit(`notification_${order.user}`, { 
-                title: "Tiền đã về ví! 💰",
-                message: `Đã hoàn trả ${order.totalAmount.toLocaleString()}đ vào tài khoản SlotHub của bạn.`,
-                type: 'REFUND',
-                newBalance: user.walletBalance
+        let refundAmount;
+        try {
+            ({ refundAmount } = await reverseOrderPayment(before, {
+                description: `Admin hoàn 100% đơn #${String(before._id).slice(-6)}. Lý do: ${reason}`,
+            }));
+        } catch (error) {
+            // Hoàn tiền lỗi → trả đơn về trạng thái cũ để admin thử lại
+            await Order.updateOne({ _id: before._id }, {
+                $set: {
+                    status: before.status, paymentStatus: 'Paid',
+                    cancelledBy: before.cancelledBy || '', cancelledAt: before.cancelledAt || null, cancelReason: before.cancelReason || '',
+                },
             });
+            return res.status(500).json({ message: 'Hoàn tiền lỗi, đơn đã được giữ nguyên — vui lòng thử lại.', error: error.message });
         }
 
-        res.status(200).json({ 
-            message: "Hoàn tiền thành công vào ví nội bộ!", 
-            transactionId: refundTrans._id,
-            currentBalance: user.walletBalance
+        await Order.updateOne({ _id: before._id }, { $set: { refundPercent: 100, refundAmount } });
+        await logOrderStatus({
+            orderId: before._id, fromStatus: before.status, toStatus: 'Cancelled',
+            changedBy: req.user.id, changedByRole: 'admin', note: `Admin hoàn tiền: ${reason}`,
         });
+        await logAudit({
+            actor: req.user.id, actorRole: 'admin', action: 'ORDER_REFUNDED_BY_ADMIN',
+            entityType: 'Order', entityId: before._id, metadata: { reason, refundAmount },
+        });
+        await notifyStudent(req, {
+            userId: before.user,
+            title: 'Tiền đã về ví! 💰',
+            message: `Đơn #${String(before._id).slice(-6).toUpperCase()} đã được hoàn ${Number(refundAmount).toLocaleString('vi-VN')}đ vào ví SlotHub. Lý do: ${reason}`,
+            orderId: before._id,
+        });
+
+        res.status(200).json({ message: 'Hoàn tiền thành công vào ví nội bộ!', refundAmount });
     } catch (error) {
-        res.status(500).json({ message: "Lỗi hoàn tiền", error: error.message });
+        res.status(500).json({ message: 'Lỗi hoàn tiền', error: error.message });
     }
 };
 
