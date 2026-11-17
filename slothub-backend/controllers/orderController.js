@@ -6,6 +6,7 @@ const TimeSlot = require('../models/TimeSlot');
 const crypto = require('crypto');
 const { settleOrderPayment } = require('../utils/settleOrderPayment');
 const { getVendorStatus } = require('../utils/vendorHours');
+const { getEffectivePrice } = require('../utils/pricing');
 const { notifyVendorNewOrder } = require('../utils/vendorNotify');
 const { sendPickupEmail } = require('../utils/pickupEmail');
 const { issuePickupCode } = require('../utils/pickupCode');
@@ -65,11 +66,13 @@ const processVendorGroup = async (cartItems, slotOpts) => {
             };
         }
         vendorId = itemDb.vendor?._id || itemDb.vendor;
-        totalAmount += itemDb.price * cartItem.quantity;
+        // Giá chốt tại thời điểm đặt (đã trừ giảm giá món nếu đang áp dụng) — tính ở server
+        const unitPrice = getEffectivePrice(itemDb);
+        totalAmount += unitPrice * cartItem.quantity;
         processedItems.push({
             menuItem: itemDb._id,
             quantity: cartItem.quantity,
-            price: itemDb.price,
+            price: unitPrice,
             ...(itemDb.calories != null && { calories: itemDb.calories })
         });
     }

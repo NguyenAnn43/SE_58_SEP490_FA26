@@ -344,4 +344,4 @@ const getForecast = async (vendorId, query = {}) => {
     };
 };
 
-module.exports = { getTopItems, getTimeseries, getForecast, VALID_STATUSES, linearRegression };
+module.exports = { getTopItems, getTimeseries, getForecast, VALID_STATUSES, linearRegression, startOfVnDay };

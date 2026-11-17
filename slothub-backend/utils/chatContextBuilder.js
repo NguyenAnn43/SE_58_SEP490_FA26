@@ -1,5 +1,6 @@
 const MenuItem = require('../models/MenuItem');
 const { getVendorStatus } = require('./vendorHours');
+const { withPricing } = require('./pricing');
 
 const formatReviews = (reviews = [], limit = 2) => {
     if (!reviews.length) return 'Chưa có đánh giá';
@@ -12,9 +13,9 @@ const formatReviews = (reviews = [], limit = 2) => {
 
 /** Xây dựng ngữ cảnh menu + quầy + review + calo cho SlotAI */
 const buildChatKnowledgeContext = async () => {
-    const menuItems = await MenuItem.find({})
+    const menuItems = (await MenuItem.find({})
         .populate('vendor', 'name description openTime closeTime isActive category imageUrl')
-        .lean();
+        .lean()).map((m) => withPricing(m));
 
     if (!menuItems.length) {
         return {
@@ -96,7 +97,7 @@ const buildChatKnowledgeContext = async () => {
                 ? 'HẾT/TẠM NGƯNG'
                 : 'CÒN BÁN';
             contextText += `  ${idx + 1}. ${item.name} [${stock}]\n`;
-            contextText += `     Giá: ${item.price?.toLocaleString('vi-VN')}đ | Danh mục: ${item.category || 'Khác'}`;
+            contextText += `     Giá: ${item.price?.toLocaleString('vi-VN')}đ${item.discountPercent ? ` (đang giảm ${item.discountPercent}%, giá gốc ${item.originalPrice?.toLocaleString('vi-VN')}đ)` : ''} | Danh mục: ${item.category || 'Khác'}`;
             if (item.calories) contextText += ` | Calories: ${item.calories} kcal`;
             else contextText += ` | Calories: chưa có (cần ước lượng)`;
             if (item.rating > 0) {

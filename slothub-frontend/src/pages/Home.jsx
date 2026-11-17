@@ -7,6 +7,7 @@ import BrandLogo from '../components/BrandLogo';
 import WalletWidget from '../components/WalletWidget';
 import Footer from '../components/Footer';
 import FoodCard from '../components/FoodCard';
+import PriceTag, { hasDiscount } from '../components/PriceTag';
 import FoodDetailModal from '../components/FoodDetailModal';
 import { CART_UPDATED_EVENT } from '../components/ChatWidget';
 import PickupSlotFilter from '../components/PickupSlotFilter';
@@ -29,6 +30,26 @@ const normalizeStr = (str) => {
     .replace(/[\s\u00a0\u200b]+/g, ' ')
     .trim();
 };
+
+/** Món đặt được ngay trong khung giờ đang xem (quầy mở + còn hàng) */
+const isOrderable = (item) => item.vendorIsOpen !== false && item.countInStock !== 0;
+
+/** Dải món nổi bật cuộn ngang: "Bán chạy hôm nay", "Đang giảm giá" */
+const HighlightStrip = ({ title, hint, items, onAdd, onViewDetail }) => (
+  <section className="mb-8">
+    <div className="flex items-baseline justify-between gap-3 mb-3 px-1">
+      <h2 className="text-lg md:text-xl font-black text-gray-900">{title}</h2>
+      {hint && <span className="text-[11px] font-bold text-gray-400 text-right">{hint}</span>}
+    </div>
+    <div className="flex gap-4 overflow-x-auto pb-3 -mx-1 px-1 snap-x custom-scrollbar">
+      {items.map((item) => (
+        <div key={item._id} className="w-60 shrink-0 snap-start">
+          <FoodCard item={item} onAdd={onAdd} onViewDetail={onViewDetail} />
+        </div>
+      ))}
+    </div>
+  </section>
+);
 
 const Home = () => {
   const { balance, user, logout, fetchBalance } = useContext(AuthContext);
@@ -219,6 +240,24 @@ const Home = () => {
 
     return matchCategory && matchVendor && matchSlot && matchSearch;
   });
+
+  // ========== BÁN CHẠY + GIẢM GIÁ (API đã gắn bestsellerRank và sắp món giảm giá lên đầu) ==========
+  const showHighlights = !searchTerm.trim() && selectedCategory === CATEGORY_ALL && !selectedVendorId;
+  const bestsellerItems = useMemo(
+    () => menuItems
+      .filter((i) => i.bestsellerRank && isOrderable(i))
+      .sort((a, b) => a.bestsellerRank - b.bestsellerRank)
+      .slice(0, 5),
+    [menuItems]
+  );
+  const bestsellerPeriod = bestsellerItems[0]?.bestsellerPeriod || 'today';
+  const dealItems = useMemo(
+    () => menuItems
+      .filter((i) => hasDiscount(i) && isOrderable(i))
+      .sort((a, b) => b.discountPercent - a.discountPercent)
+      .slice(0, 8),
+    [menuItems]
+  );
 
   // ========== THUẬT TOÁN NHÓM & SẮP XẾP THEO RATING/SỐ MÓN ==========
   const groupedItems = useMemo(() => {
@@ -556,6 +595,26 @@ const Home = () => {
              </div>
           )}
 
+          {/* ===== BÁN CHẠY HÔM NAY + ĐANG GIẢM GIÁ (chỉ ở màn hình chính, không khi đang tìm / lọc) ===== */}
+          {showHighlights && bestsellerItems.length > 0 && (
+            <HighlightStrip
+              title={bestsellerPeriod === 'week' ? t('home.bestsellerWeekTitle') : t('home.bestsellerTitle')}
+              hint={bestsellerPeriod === 'week' ? t('home.bestsellerWeekHint') : ''}
+              items={bestsellerItems}
+              onAdd={handleAddToCart}
+              onViewDetail={(it) => setDetailItem(it)}
+            />
+          )}
+          {showHighlights && dealItems.length > 0 && (
+            <HighlightStrip
+              title={t('home.dealsTitle')}
+              hint={t('home.dealsHint')}
+              items={dealItems}
+              onAdd={handleAddToCart}
+              onViewDetail={(it) => setDetailItem(it)}
+            />
+          )}
+
           {searchTerm.trim() && (
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 px-6 py-5 rounded-[2rem] shadow-sm animate-in fade-in duration-300">
                 <p className="text-gray-700 font-medium text-lg">Kết quả cho: <span className="font-black text-[#F27124]">"{searchTerm}"</span></p>
@@ -782,7 +841,7 @@ const Home = () => {
                           <button onClick={() => handleRemoveItem(i.menuItem?._id)} className="text-gray-300 hover:text-red-500 transition-colors shrink-0 mt-0.5"><X size={16}/></button>
                         </div>
                         <div className="flex justify-between items-center mt-3">
-                          <span className="font-black text-[13px] sm:text-sm text-[#F27124]">{(i.menuItem?.price * i.quantity).toLocaleString()}đ</span>
+                          <PriceTag item={i.menuItem} quantity={i.quantity} size="sm" className="items-end" />
                           <div className="flex items-center bg-gray-50 rounded-full border border-gray-200 p-0.5">
                             <button onClick={() => handleUpdateQuantity(i.menuItem?._id, i.quantity, -1)} className="w-6 h-6 flex items-center justify-center rounded-full text-gray-500 hover:bg-white hover:shadow-sm transition-all">
                               {i.quantity === 1 ? <Trash2 size={12} className="text-red-500" /> : <Minus size={12} />}

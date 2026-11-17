@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
 import FavoriteButton from './FavoriteButton';
+import PriceTag, { hasDiscount, formatDiscountEnd } from './PriceTag';
 import {
   X, Store, Flame, Plus, Minus, ShoppingCart, Star,
   Loader2, Clock, ShieldCheck, Send, MessageSquare
@@ -196,9 +197,17 @@ const FoodDetailModal = ({ itemId, initialItem, onClose, onAddedToCart, onItemUp
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-2xl font-black text-[#F27124]">
-                  {item.price?.toLocaleString()}<span className="text-sm text-gray-400 font-bold">đ</span>
-                </span>
+                <div className="flex items-end gap-2">
+                  <PriceTag item={item} size="lg" />
+                  {hasDiscount(item) && (
+                    <span className="mb-1 flex flex-col items-start gap-0.5">
+                      <span className="bg-red-600 text-white text-xs font-black px-2 py-0.5 rounded-lg">-{item.discountPercent}%</span>
+                      {item.discountEndAt && (
+                        <span className="text-[10px] font-bold text-red-500">Giảm đến {formatDiscountEnd(item.discountEndAt)}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
                 {item.calories && (
                   <span className="text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg flex items-center gap-1">
                     <Flame size={12} /> {item.calories} kcal

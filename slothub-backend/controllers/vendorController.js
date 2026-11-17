@@ -1,4 +1,5 @@
 const Vendor = require('../models/Vendor');
+const { parseDiscountInput, discountInfo } = require('../utils/pricing');
 const Order = require('../models/Order');
 const MenuItem = require('../models/MenuItem');
 const User = require('../models/User');
@@ -436,7 +437,9 @@ const getMyMenu = async (req, res) => {
 
         // 🌟 ĐÃ SỬA LỖI: Trả lại vendor._id (ObjectId) để MongoDB tìm kiếm chính xác 100%
         const menu = await MenuItem.find({ vendor: vendor._id }).sort({ createdAt: -1 });
-        res.status(200).json(menu);
+        // Giữ nguyên `price` (giá gốc để sửa), thêm giá đang bán + trạng thái giảm giá
+        const now = new Date();
+        res.status(200).json(menu.map((m) => ({ ...m.toObject(), ...discountInfo(m, now) })));
     } catch (error) {
         res.status(500).json({ message: 'Lỗi khi lấy thực đơn', error: error.message });
     }
@@ -486,6 +489,8 @@ const addMenuItem = async (req, res) => {
         if (!cal.ok) return res.status(400).json({ message: cal.message });
         const nut = parseNutrients(req.body);
         if (!nut.ok) return res.status(400).json({ message: nut.message });
+        const disc = parseDiscountInput(req.body);
+        if (!disc.ok) return res.status(400).json({ message: disc.message });
 
         const newItem = new MenuItem({
             vendor: vendor._id,
@@ -496,7 +501,8 @@ const addMenuItem = async (req, res) => {
             category,
             isAvailable: true,
             ...(cal.calories !== undefined && { calories: cal.calories }),
-            ...nut.set
+            ...nut.set,
+            ...disc.set
         });
 
         await newItem.save();
@@ -536,6 +542,10 @@ const updateMenuItem = async (req, res) => {
         if (!nut.ok) return res.status(400).json({ message: nut.message });
         Object.assign(setFields, nut.set);
         Object.assign(unsetFields, nut.unset);
+        const disc = parseDiscountInput(req.body, item);
+        if (!disc.ok) return res.status(400).json({ message: disc.message });
+        Object.assign(setFields, disc.set);
+        Object.assign(unsetFields, disc.unset);
 
         let updateQuery = setFields;
         if (Object.keys(unsetFields).length) {

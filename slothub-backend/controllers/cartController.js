@@ -2,6 +2,7 @@ const Cart = require('../models/Cart');
 const MenuItem = require('../models/MenuItem');
 const Vendor = require('../models/Vendor');
 const { getVendorStatus } = require('../utils/vendorHours');
+const { getEffectivePrice, withPricing } = require('../utils/pricing');
 
 const CART_POPULATE = {
     path: 'items.menuItem',
@@ -11,9 +12,10 @@ const CART_POPULATE = {
 const buildCartResponse = (cart) => {
     let totalPrice = 0;
     const vendorStatuses = {};
+    const now = new Date();
 
     cart.items.forEach((i) => {
-        if (i.menuItem?.price) totalPrice += i.menuItem.price * i.quantity;
+        if (i.menuItem?.price) totalPrice += getEffectivePrice(i.menuItem, now) * i.quantity;
     });
 
     for (const i of cart.items) {
@@ -35,8 +37,14 @@ const buildCartResponse = (cart) => {
         ? vendorIds.map((vid) => vendorStatuses[vid].message).find(Boolean) || 'Các quầy trong giỏ đã đóng cửa.'
         : '';
 
+    const plain = cart.toObject();
+    // Giá từng món trong giỏ = giá đang bán (đã trừ giảm giá), kèm giá gốc để hiển thị gạch ngang
+    plain.items = (plain.items || []).map((i) => (
+        i.menuItem && typeof i.menuItem === 'object' ? { ...i, menuItem: withPricing(i.menuItem, now) } : i
+    ));
+
     return {
-        ...cart.toObject(),
+        ...plain,
         totalPrice,
         vendorOpen,
         vendorStatusMessage,

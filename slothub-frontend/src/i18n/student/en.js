@@ -69,6 +69,11 @@ const en = {
     stallClosedBtn: 'STALL CLOSED',
     loginToOrderBtn: 'SIGN IN TO ORDER',
     dishCount: '{{count}} dishes',
+    bestsellerTitle: "🔥 Today's bestsellers",
+    bestsellerWeekTitle: "🔥 This week's bestsellers",
+    bestsellerWeekHint: 'No completed orders yet today — ranked by the last 7 days',
+    dealsTitle: '🏷️ On sale',
+    dealsHint: 'Discounted price applies when added to cart',
   },
   slotPeriods: {
     breakfast: 'Breakfast',
@@ -297,6 +302,10 @@ const en = {
     closedThisSlot: 'Not serving this time window',
     closedNowOpenLater: 'Closed now · open for selected slot',
     outOfStock: 'Sold out',
+    bestsellerToday: "Today's bestseller",
+    bestsellerWeek: "This week's bestseller",
+    soldCount: '{{count}} sold',
+    discountUntil: 'Sale ends {{time}}',
   },
   paymentResult: {
     processing: 'Processing payment result...',

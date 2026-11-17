@@ -69,6 +69,11 @@ const vi = {
     stallClosedBtn: 'QUÁN ĐÃ ĐÓNG CỬA',
     loginToOrderBtn: 'ĐĂNG NHẬP ĐỂ ĐẶT MÓN',
     dishCount: '{{count}} món',
+    bestsellerTitle: '🔥 Bán chạy hôm nay',
+    bestsellerWeekTitle: '🔥 Bán chạy tuần này',
+    bestsellerWeekHint: 'Hôm nay chưa có đơn hoàn tất — xếp hạng theo 7 ngày gần nhất',
+    dealsTitle: '🏷️ Đang giảm giá',
+    dealsHint: 'Giá đã giảm áp dụng khi thêm vào giỏ',
   },
   slotPeriods: {
     breakfast: 'Bữa sáng',
@@ -297,6 +302,10 @@ const vi = {
     closedThisSlot: 'Không phục vụ khung giờ đang xem',
     closedNowOpenLater: 'Đóng cửa bây giờ · vẫn mở khung giờ đã chọn',
     outOfStock: 'Tạm hết món',
+    bestsellerToday: 'Bán chạy hôm nay',
+    bestsellerWeek: 'Bán chạy tuần này',
+    soldCount: '{{count}} phần đã bán',
+    discountUntil: 'Giảm đến {{time}}',
   },
   paymentResult: {
     processing: 'Đang xử lý kết quả giao dịch...',
