@@ -12,7 +12,7 @@ const getAllMenuItems = async (req, res) => {
             }
         }
 
-        const menu = await MenuItem.find({ isAvailable: true }).populate('vendor', 'name openTime closeTime isActive isPaused pauseReason');
+        const menu = await MenuItem.find({ isAvailable: true }).populate('vendor', 'name openTime closeTime isActive isPaused pauseReason pausedUntil');
         const result = menu.map((item) => {
             const statusNow = getVendorStatus(item.vendor);
             const statusInSlot = slotOpts.slotStart
@@ -46,7 +46,7 @@ const getVendorMenu = async (req, res) => {
 
 const getMenuItemById = async (req, res) => {
     try {
-        const item = await MenuItem.findById(req.params.id).populate('vendor', 'name openTime closeTime isActive isPaused pauseReason');
+        const item = await MenuItem.findById(req.params.id).populate('vendor', 'name openTime closeTime isActive isPaused pauseReason pausedUntil');
         if (!item) return res.status(404).json({ message: 'Không tìm thấy món ăn này!' });
         const status = getVendorStatus(item.vendor);
         res.status(200).json({

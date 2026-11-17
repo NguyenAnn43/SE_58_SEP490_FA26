@@ -110,11 +110,14 @@ const getMyConversations = async (req, res) => {
 // [GET] Quầy để SV bắt đầu chat (từ đơn đã mua + tất cả quầy active)
 const getVendorsForChat = async (req, res) => {
     try {
-        if (req.user.role !== 'student') {
-            return res.status(403).json({ message: 'Chỉ khách hàng mới dùng được' });
+        // Sinh viên chọn quầy để chat; Admin chọn quầy để chủ động nhắn hỗ trợ
+        if (!['student', 'admin'].includes(req.user.role)) {
+            return res.status(403).json({ message: 'Chỉ khách hàng hoặc admin mới dùng được' });
         }
 
-        const orders = await Order.find({ user: req.user._id }).distinct('vendor');
+        const orders = req.user.role === 'student'
+            ? await Order.find({ user: req.user._id }).distinct('vendor')
+            : [];
         const vendors = await Vendor.find({ isActive: { $ne: false } })
             .select('name imageUrl openTime closeTime')
             .sort({ name: 1 });
@@ -170,24 +173,32 @@ const startConversation = async (req, res) => {
         }
 
         if (type === 'VENDOR_ADMIN') {
-            if (!isVendorRole(user.role)) {
-                return res.status(403).json({ message: 'Chỉ chủ quầy chat với admin' });
+            // Chủ quầy mở chat với admin, hoặc Admin chủ động mở chat với 1 quầy (gửi kèm vendorId)
+            let vendor;
+            let admin;
+            if (isVendorRole(user.role)) {
+                vendor = await Vendor.findOne({ owner: user._id });
+                if (!vendor) return res.status(404).json({ message: 'Bạn chưa có gian hàng' });
+                admin = await getAdminUser();
+                if (!admin) return res.status(404).json({ message: 'Hệ thống chưa có admin' });
+            } else if (user.role === 'admin') {
+                if (!vendorId) return res.status(400).json({ message: 'Thiếu vendorId' });
+                vendor = await Vendor.findById(vendorId);
+                if (!vendor?.owner) return res.status(404).json({ message: 'Không tìm thấy quầy' });
+                admin = user;
+            } else {
+                return res.status(403).json({ message: 'Chỉ chủ quầy và admin dùng kênh này' });
             }
-            const vendor = await Vendor.findOne({ owner: user._id });
-            if (!vendor) return res.status(404).json({ message: 'Bạn chưa có gian hàng' });
-
-            const admin = await getAdminUser();
-            if (!admin) return res.status(404).json({ message: 'Hệ thống chưa có admin' });
 
             let conv = await Conversation.findOne({
                 type: 'VENDOR_ADMIN',
-                vendorOwner: user._id
+                vendorOwner: vendor.owner
             });
             if (!conv) {
                 conv = await Conversation.create({
                     type: 'VENDOR_ADMIN',
                     vendor: vendor._id,
-                    vendorOwner: user._id,
+                    vendorOwner: vendor.owner,
                     admin: admin._id,
                     lastMessage: '',
                     lastMessageAt: new Date()

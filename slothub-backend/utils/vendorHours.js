@@ -28,6 +28,21 @@ const isVendorOpenForTimeRange = (openTime, closeTime, rangeStart, rangeEnd) => 
     return overlaps(open, 24 * 60) || overlaps(0, close);
 };
 
+/** Đang tạm tắt? (hết hẹn giờ pausedUntil thì coi như đã mở lại, kể cả trước khi job dọn kịp chạy) */
+const isVendorPausedNow = (vendor, now = new Date()) => {
+    if (!vendor?.isPaused) return false;
+    if (vendor.pausedUntil && new Date(vendor.pausedUntil).getTime() <= now.getTime()) return false;
+    return true;
+};
+
+/** VD: "07:00 18/10" theo giờ Việt Nam */
+const formatReopenTime = (date) => {
+    const d = new Date(date);
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+    const day = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+    return `${time} ${day}`;
+};
+
 const getVendorStatus = (vendor, options = {}) => {
     const { slotStart, slotEnd } = options;
     if (!vendor) {
@@ -40,14 +55,16 @@ const getVendorStatus = (vendor, options = {}) => {
             closedBy: 'admin',
         };
     }
-    if (vendor.isPaused) {
+    if (isVendorPausedNow(vendor)) {
         const reason = vendor.pauseReason?.trim();
+        const reopen = vendor.pausedUntil ? ` — mở lại lúc ${formatReopenTime(vendor.pausedUntil)}` : '';
         return {
             isOpen: false,
             message: reason
-                ? `Quầy "${vendor.name}" tạm tắt: ${reason}`
-                : `Quầy "${vendor.name}" tạm tắt nhận đơn — chủ quầy đang bận.`,
+                ? `Quầy "${vendor.name}" tạm tắt: ${reason}${reopen}`
+                : `Quầy "${vendor.name}" tạm tắt nhận đơn — chủ quầy đang bận${reopen}.`,
             closedBy: 'vendor_pause',
+            pausedUntil: vendor.pausedUntil || null,
         };
     }
     const isOpen = slotStart && slotEnd
@@ -81,5 +98,7 @@ module.exports = {
     isVendorOpenNow,
     isVendorOpenForTimeRange,
     getVendorStatus,
-    assertVendorsOpen
+    assertVendorsOpen,
+    isVendorPausedNow,
+    formatReopenTime
 };

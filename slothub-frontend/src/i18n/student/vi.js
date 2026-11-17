@@ -18,6 +18,7 @@ const vi = {
     logout: 'Đăng xuất',
     profile: 'Hồ sơ cá nhân',
     orders: 'Lịch sử đơn hàng',
+    favorites: 'Món yêu thích',
     messages: 'Tin nhắn & Report quầy',
     forum: 'Diễn đàn món ngon',
     wallet: 'Ví SlotHub',
@@ -136,6 +137,9 @@ const vi = {
     review: 'Đánh giá',
     report: 'Báo cáo quầy',
     status: {
+      PendingApproval: 'Chờ quầy xác nhận',
+      PendingPayment: 'Chờ thanh toán',
+      Rejected: 'Quầy từ chối',
       Pending: 'Chờ xác nhận',
       Processing: 'Quán đang làm',
       Ready: 'Đến lấy ngay!',

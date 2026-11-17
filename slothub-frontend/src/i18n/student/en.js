@@ -18,6 +18,7 @@ const en = {
     logout: 'Sign out',
     profile: 'Profile',
     orders: 'Order history',
+    favorites: 'Favorites',
     messages: 'Messages & reports',
     forum: 'Food forum',
     wallet: 'SlotHub Wallet',
@@ -136,6 +137,9 @@ const en = {
     review: 'Review',
     report: 'Report stall',
     status: {
+      PendingApproval: 'Awaiting stall approval',
+      PendingPayment: 'Awaiting payment',
+      Rejected: 'Rejected by stall',
       Pending: 'Pending',
       Processing: 'Preparing',
       Ready: 'Ready for pickup!',

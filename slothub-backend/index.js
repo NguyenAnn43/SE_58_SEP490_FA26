@@ -15,6 +15,10 @@ app.use(express.json());
 
 connectDB();
 
+// Tự động mở lại quầy khi hết thời gian tạm tắt (kiểm tra mỗi phút)
+const { startVendorAutoResume } = require('./utils/vendorAutoResume');
+startVendorAutoResume();
+
 // ==========================================
 // 3. ROUTES DECLARATION
 // ==========================================
@@ -50,6 +54,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/favorites', require('./routes/favoriteRoutes'));
 
 // ==========================================
 // 4. CHẠY SERVER

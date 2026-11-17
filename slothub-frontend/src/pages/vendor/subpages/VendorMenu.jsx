@@ -59,11 +59,14 @@ const VendorMenu = () => {
       setFormData({
         name: item.name, price: item.price, description: item.description || '',
         imageUrl: item.imageUrl, category: item.category, isAvailable: item.isAvailable,
-        calories: item.calories != null ? String(item.calories) : ''
+        calories: item.calories != null ? String(item.calories) : '',
+        protein: item.protein != null ? String(item.protein) : '',
+        carbs: item.carbs != null ? String(item.carbs) : '',
+        fat: item.fat != null ? String(item.fat) : ''
       });
     } else {
       setEditingItem(null);
-      setFormData({ name: '', price: '', description: '', imageUrl: '', category: 'Cơm', calories: '', isAvailable: true });
+      setFormData({ name: '', price: '', description: '', imageUrl: '', category: 'Cơm', calories: '', protein: '', carbs: '', fat: '', isAvailable: true });
     }
     setImageFile(null);
     setImagePreview(item?.imageUrl || null);
@@ -372,6 +375,28 @@ const VendorMenu = () => {
                       </p>
                     )}
                     <p className="text-[11px] portal-muted ml-1">Giúp khách hàng & SlotAI gợi ý món healthy. Ước lượng 1 phần ăn.</p>
+                  </div>
+
+                  {/* Dinh dưỡng thêm (tuỳ chọn) — SlotAI dùng khi khách hỏi "nhiều protein", "ít béo"... */}
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-sm font-bold portal-text-secondary ml-1">
+                      Dinh dưỡng / phần <span className="portal-muted font-medium">(tuỳ chọn, gram)</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[['protein', 'Protein'], ['carbs', 'Carb'], ['fat', 'Chất béo']].map(([key, label]) => (
+                        <input
+                          key={key}
+                          type="number"
+                          min="0"
+                          max="500"
+                          step="0.1"
+                          value={formData[key] ?? ''}
+                          onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                          className="bg-[var(--portal-input-bg)] border border-[var(--portal-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--portal-text)] focus:border-[#F27124] outline-none"
+                          placeholder={`${label} (g)`}
+                        />
+                      ))}
+                    </div>
                   </div>
 
                   <div className="space-y-1.5 md:col-span-2">

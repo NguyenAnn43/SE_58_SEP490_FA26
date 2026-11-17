@@ -11,7 +11,7 @@ import FoodDetailModal from './FoodDetailModal';
 export const CART_UPDATED_EVENT = 'slothub:cart-updated';
 
 const vnd = (n) => `${Number(n || 0).toLocaleString('vi-VN')}đ`;
-const STATUS_LABEL = { Pending: 'Chờ thanh toán', Processing: 'Quầy đang chuẩn bị', Ready: 'Sẵn sàng nhận', Completed: 'Hoàn thành', Cancelled: 'Đã huỷ' };
+const STATUS_LABEL = { Pending: 'Chờ quầy xác nhận', Processing: 'Quầy đang chuẩn bị', Rejected: 'Quầy từ chối', Ready: 'Sẵn sàng nhận', Completed: 'Hoàn thành', Cancelled: 'Đã huỷ' };
 const PAYMENT_STATUS_LABEL = { Paid: 'Đã thanh toán', Unpaid: 'Chưa thanh toán', Failed: 'Thanh toán thất bại', Refunded: 'Đã hoàn tiền' };
 const newKey = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 

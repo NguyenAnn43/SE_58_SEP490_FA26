@@ -47,7 +47,7 @@ const notifyVendorNewOrder = async (req, order, student) => {
             recipientId: vendor.owner,
             orderId: orderData._id || order._id,
             title: `Đơn mới · ${vendor.name}`,
-            message: `${who} vừa đặt đơn #${ref} · ${amount}đ · Nhận: ${slot}`,
+            message: `${who} vừa đặt đơn #${ref} · ${amount}đ · Nhận: ${slot} — chờ bạn duyệt`,
             type: 'NEW_ORDER',
             actionLink: 'orders',
             isRead: false,

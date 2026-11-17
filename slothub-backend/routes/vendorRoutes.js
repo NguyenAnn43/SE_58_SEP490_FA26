@@ -8,6 +8,7 @@ const {
     getVendorNotifications,
     markVendorNotificationRead
 } = require('../controllers/vendorController');
+const { getTopItemsStats, getTimeseriesStats, getForecastStats } = require('../controllers/vendorStatsController');
 
 // ==============================================
 // 1. CÁC API CHỦ QUẦY (đặt trước /:id)
@@ -20,6 +21,11 @@ router.get('/analytics', protect, getVendorAnalytics);
 router.get('/export-excel', protect, exportVendorExcel);
 router.get('/revenue-history', protect, getVendorRevenueHistory);
 router.get('/notifications', protect, getVendorNotifications);
+
+// Thống kê món nổi bật & dự báo nhu cầu (chỉ đơn hợp lệ của quầy mình)
+router.get('/stats/top-items', protect, getTopItemsStats);
+router.get('/stats/timeseries', protect, getTimeseriesStats);
+router.get('/stats/forecast', protect, getForecastStats);
 router.put('/notifications/:id/read', protect, markVendorNotificationRead);
 
 router.get('/menu', protect, getMyMenu);

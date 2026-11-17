@@ -28,7 +28,9 @@ const notificationSchema = new mongoose.Schema({
         enum: [
             'DEPOSIT', 'WITHDRAW', 'PAYOUT', 'NEW_VENDOR', 'NEW_USER', 'NEW_ORDER',
             'NEW_REVIEW', 'REPORT', 'SYSTEM', 'ORDER_READY', 'ORDER_COMPLETED', 'PICKUP',
-            'PAYOUT_CONFIRMED', 'WITHDRAW_CONFIRMED'
+            'PAYOUT_CONFIRMED', 'WITHDRAW_CONFIRMED',
+            // Duyệt / từ chối đơn + hoàn tiền
+            'ORDER_APPROVED', 'ORDER_REJECTED', 'REFUND_SUCCESS', 'REFUND_FAILED'
         ],
         default: 'SYSTEM'
     },

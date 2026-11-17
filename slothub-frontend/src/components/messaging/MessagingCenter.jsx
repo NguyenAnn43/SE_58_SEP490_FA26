@@ -133,7 +133,7 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
   }, [messages]);
 
   useEffect(() => {
-    if (mode === 'student' && showNewChat) {
+    if ((mode === 'student' || mode === 'admin') && showNewChat) {
       api.get('/messages/vendors-for-chat').then((r) => setVendors(r.data || [])).catch(() => {});
     }
   }, [mode, showNewChat]);
@@ -145,7 +145,9 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
 
   const startVendorChat = async (vendorId) => {
     try {
-      const res = await api.post('/messages/conversations', { type: 'STUDENT_VENDOR', vendorId });
+      // Admin chủ động nhắn cho quầy → kênh VENDOR_ADMIN
+      const type = mode === 'admin' ? 'VENDOR_ADMIN' : 'STUDENT_VENDOR';
+      const res = await api.post('/messages/conversations', { type, vendorId });
       const conv = res.data.conversation;
       await loadConversations();
       if (conv?._id) openConversation(conv._id);
@@ -227,12 +229,12 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
               {mode === 'admin' && 'Hỗ trợ chủ quầy'}
             </p>
           </div>
-          {mode === 'student' && (
+          {(mode === 'student' || mode === 'admin') && (
             <button
               type="button"
               onClick={() => setShowNewChat(!showNewChat)}
               className="p-2 rounded-xl bg-[#F27124]/10 text-[#F27124] hover:bg-[#F27124] hover:text-[var(--portal-text)] transition-colors"
-              title="Chat quầy mới"
+              title={mode === 'admin' ? 'Nhắn cho quầy' : 'Chat quầy mới'}
             >
               <Plus size={20} />
             </button>
@@ -248,9 +250,11 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
           )}
         </div>
 
-        {showNewChat && mode === 'student' && (
+        {showNewChat && (mode === 'student' || mode === 'admin') && (
           <div className={`p-3 border-b max-h-48 overflow-y-auto ${isDark ? 'border-[var(--portal-border)] bg-[var(--portal-table-head)]' : 'border-gray-100 bg-gray-50'}`}>
-            <p className={`text-xs font-bold mb-2 ${textMuted}`}>Chọn quầy để chat / report:</p>
+            <p className={`text-xs font-bold mb-2 ${textMuted}`}>
+              {mode === 'admin' ? 'Chọn quầy để nhắn hỗ trợ:' : 'Chọn quầy để chat / report:'}
+            </p>
             {vendors.map((v) => (
               <button
                 key={v._id}
@@ -269,7 +273,7 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {conversations.length === 0 ? (
             <p className={`p-6 text-center text-sm ${textMuted}`}>
-              {mode === 'student' ? 'Bấm + để chat với quầy' : mode === 'vendor' ? 'Bấm Admin hoặc chờ SV nhắn' : 'Chờ quầy liên hệ'}
+              {mode === 'student' ? 'Bấm + để chat với quầy' : mode === 'vendor' ? 'Bấm Admin hoặc chờ SV nhắn' : 'Bấm + để nhắn cho quầy, hoặc chờ quầy liên hệ'}
             </p>
           ) : (
             conversations.map((c) => (

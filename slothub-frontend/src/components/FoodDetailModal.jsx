@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
+import FavoriteButton from './FavoriteButton';
 import {
   X, Store, Flame, Plus, Minus, ShoppingCart, Star,
   Loader2, Clock, ShieldCheck, Send, MessageSquare
@@ -172,6 +173,11 @@ const FoodDetailModal = ({ itemId, initialItem, onClose, onAddedToCart, onItemUp
                   </span>
                 </div>
               )}
+              <FavoriteButton
+                menuItemId={item._id}
+                size={18}
+                className="absolute bottom-3 right-3 z-10 w-9 h-9 rounded-full bg-white/90 shadow-md hover:bg-white"
+              />
               <div className="absolute bottom-3 left-4 right-12">
                 <h2 className="text-xl font-black text-white leading-tight line-clamp-2">{item.name}</h2>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">

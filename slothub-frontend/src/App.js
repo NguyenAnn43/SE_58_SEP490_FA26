@@ -18,6 +18,8 @@ import PaymentResult from './pages/PaymentResult';
 import Profile from './pages/Profile';
 import StudentMessages from './pages/StudentMessages';
 import Forum from './pages/Forum';
+import Favorites from './pages/Favorites';
+import StudentOrderNotifier from './components/StudentOrderNotifier';
 import ChatWidget from './components/ChatWidget';
 
 // Dành cho Admin & Vendor
@@ -66,7 +68,13 @@ const ConditionalChatWidget = () => {
   
   // Chỉ khách hàng mới được chat với AI
   if (user && user.role === 'student') {
-    return <ChatWidget />;
+    return (
+      <>
+        <ChatWidget />
+        {/* Thông báo đơn hàng (bị từ chối, hoàn tiền, quầy duyệt...) ở mọi trang */}
+        <StudentOrderNotifier />
+      </>
+    );
   }
   
   // Admin, Vendor không bị vướng tầm nhìn
@@ -102,6 +110,7 @@ function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/messages" element={<StudentMessages />} />
               <Route path="/forum" element={<Forum />} />
+              <Route path="/favorites" element={<Favorites />} />
               
               {/* 🌟 ROUTE DÀNH CHO NGƯỜI BÁN (VENDOR) */}
               <Route path="/vendor/*" element={<VendorPage />} />

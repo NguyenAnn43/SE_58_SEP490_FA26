@@ -51,9 +51,35 @@ const orderSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: ['Pending', 'Processing', 'Ready', 'Completed', 'Cancelled'],
+        enum: ['Pending', 'Processing', 'Ready', 'Completed', 'Cancelled', 'Rejected'],
         default: 'Pending'
     },
+
+    // ===== DUYỆT ĐƠN (chủ quầy Approve / Reject) =====
+    // PENDING: chờ quầy xử lý · APPROVED: quầy đã nhận làm · REJECTED: quầy từ chối
+    approvalStatus: {
+        type: String,
+        enum: ['PENDING', 'APPROVED', 'REJECTED'],
+        default: 'PENDING',
+        index: true
+    },
+    approvedAt: { type: Date, default: null },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    rejectedAt: { type: Date, default: null },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    rejectReason: { type: String, default: '', maxlength: 300 },
+
+    // ===== HOÀN TIỀN (khi quầy từ chối đơn đã thanh toán) =====
+    // Hoàn vào ví SlotHub (payOS không có API hoàn tiền) — chỉ SUCCESS khi ví đã được cộng thật
+    refundStatus: {
+        type: String,
+        enum: ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'SUCCESS', 'FAILED'],
+        default: 'NOT_REQUIRED'
+    },
+    refundMethod: { type: String, enum: ['', 'WALLET'], default: '' },
+    refundError: { type: String, default: '' },
+    refundAttempts: { type: Number, default: 0 },
+    refundedAt: { type: Date, default: null },
 
     paymentStatus: {
         type: String,

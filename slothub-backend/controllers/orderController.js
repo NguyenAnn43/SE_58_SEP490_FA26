@@ -28,7 +28,7 @@ const normalizeVendorId = (vendor) => {
 
 const CART_POPULATE = {
     path: 'items.menuItem',
-    populate: { path: 'vendor', select: 'name openTime closeTime isActive isPaused pauseReason' }
+    populate: { path: 'vendor', select: 'name openTime closeTime isActive isPaused pauseReason pausedUntil' }
 };
 
 const buildVendorGroups = (cartItems, selectedMenuItemIds) => {
@@ -173,7 +173,9 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                     pickupSlotStartAt,
                     pickupSlotEndAt,
                     pickupDay,
-                    status: 'Processing',
+                    // Đã thanh toán → chờ chủ quầy duyệt (Approve/Reject)
+                    status: 'Pending',
+                    approvalStatus: 'PENDING',
                     paymentStatus: 'Paid',
                     paymentMethod: 'wallet',
                     checkoutBatchId,
@@ -186,10 +188,10 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                 await logOrderStatus({
                     orderId: newOrder._id,
                     fromStatus: '',
-                    toStatus: 'Processing',
+                    toStatus: 'Pending',
                     changedBy: userId,
                     changedByRole: 'student',
-                    note: 'Đặt đơn & thanh toán ví'
+                    note: 'Đặt đơn & thanh toán ví — chờ quầy duyệt'
                 });
                 await settleOrderPayment({
                     orderId: newOrder._id,
