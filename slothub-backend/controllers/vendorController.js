@@ -6,7 +6,7 @@ const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
 
 const isVendorRole = (role) => ['vendor', 'vendor_owner'].includes(role);
-const { getVendorStatus } = require('../utils/vendorHours');
+const { getVendorStatus, formatReopenTime, isVendorPausedNow } = require('../utils/vendorHours');
 const { normalizeTimeString, normalizeVendorHours } = require('../utils/timeFormat');
 const { PLATFORM_FEE_RATE } = require('../utils/settleOrderPayment');
 const VENDOR_SHARE = 1 - PLATFORM_FEE_RATE;
@@ -26,7 +26,7 @@ const { buildVendorExcelBuffer, buildExportFilename } = require('../utils/vendor
 const getAllVendors = async (req, res) => {
     try {
         const vendors = await Vendor.find()
-            .select('name openTime closeTime isActive isPaused pauseReason category imageUrl description')
+            .select('name openTime closeTime isActive isPaused pauseReason pausedUntil category imageUrl description')
             .sort({ isActive: -1, name: 1 });
 
         const updatedVendors = vendors.map(vendor => {
@@ -189,9 +189,25 @@ const toggleStorePause = async (req, res) => {
             return res.status(403).json({ message: 'Chỉ chủ quầy mới thao tác được!' });
         }
 
-        const { isPaused, pauseReason } = req.body;
+        const { isPaused, pauseReason, pausedUntil } = req.body;
         if (typeof isPaused !== 'boolean') {
             return res.status(400).json({ message: 'Thiếu trạng thái isPaused (true/false).' });
+        }
+
+        // Hẹn giờ tự mở lại (tuỳ chọn): phải ở tương lai, tối đa 30 ngày
+        let reopenAt = null;
+        if (isPaused && pausedUntil) {
+            reopenAt = new Date(pausedUntil);
+            const now = Date.now();
+            if (Number.isNaN(reopenAt.getTime())) {
+                return res.status(400).json({ message: 'Thời gian mở lại không hợp lệ.' });
+            }
+            if (reopenAt.getTime() <= now + 60 * 1000) {
+                return res.status(400).json({ message: 'Thời gian mở lại phải sau thời điểm hiện tại ít nhất 1 phút.' });
+            }
+            if (reopenAt.getTime() > now + 30 * 24 * 60 * 60 * 1000) {
+                return res.status(400).json({ message: 'Chỉ hẹn mở lại tối đa trong 30 ngày.' });
+            }
         }
 
         const vendor = await Vendor.findOne({ owner: req.user.id });
@@ -205,15 +221,21 @@ const toggleStorePause = async (req, res) => {
             });
         }
 
+        const wasPaused = vendor.isPaused;
         vendor.isPaused = isPaused;
         vendor.pauseReason = isPaused ? String(pauseReason || 'Chủ quầy tạm bận').trim().slice(0, 200) : '';
-        vendor.pausedAt = isPaused ? new Date() : null;
+        // Đang tắt mà chỉ đổi giờ mở lại thì giữ nguyên thời điểm bắt đầu tắt
+        vendor.pausedAt = isPaused ? (wasPaused && vendor.pausedAt ? vendor.pausedAt : new Date()) : null;
+        vendor.pausedUntil = isPaused ? reopenAt : null;
         await vendor.save();
 
         const status = getVendorStatus(vendor);
+        const reopenText = reopenAt ? ` Tự động mở lại lúc ${formatReopenTime(reopenAt)}.` : '';
         return res.status(200).json({
             message: isPaused
-                ? 'Đã tạm tắt quầy — sinh viên không thể đặt món.'
+                ? (wasPaused
+                    ? `Đã cập nhật hẹn giờ mở lại.${reopenText || ' Quầy sẽ tắt đến khi bạn tự bật lại.'}`
+                    : `Đã tạm tắt quầy — sinh viên không thể đặt món.${reopenText}`)
                 : 'Đã bật lại quầy (trong khung giờ mở cửa sẽ nhận đơn).',
             vendor: {
                 ...normalizeVendorHours(vendor),
@@ -281,7 +303,7 @@ const getMyDashboard = async (req, res) => {
                     $match: {
                         vendor: vendorId,
                         paymentStatus: 'Paid',
-                        status: { $ne: 'Cancelled' },
+                        status: { $nin: ['Cancelled', 'Rejected'] },
                         createdAt: { $gte: startOfMonth }
                     }
                 },
@@ -322,7 +344,7 @@ const getMyDashboard = async (req, res) => {
                     $match: {
                         vendor: vendorId,
                         paymentStatus: 'Paid',
-                        status: { $ne: 'Cancelled' },
+                        status: { $nin: ['Cancelled', 'Rejected'] },
                         createdAt: { $gte: startOfToday }
                     }
                 },
@@ -338,8 +360,9 @@ const getMyDashboard = async (req, res) => {
             vendor: {
                 ...normalizeVendorHours(vendor),
                 isOpen: status.isOpen,
-                isPaused: vendor.isPaused,
+                isPaused: isVendorPausedNow(vendor),
                 pauseReason: vendor.pauseReason,
+                pausedUntil: isVendorPausedNow(vendor) ? vendor.pausedUntil : null,
                 statusMessage: status.message,
             },
             stats: {
@@ -433,6 +456,26 @@ const parseCaloriesInput = (value) => {
     return { ok: true, calories: Math.round(n) };
 };
 
+/** Protein / carbs / fat (gram/phần) — tuỳ chọn; rỗng = xoá dữ liệu */
+const NUTRIENT_KEYS = ['protein', 'carbs', 'fat'];
+const parseNutrients = (body) => {
+    const set = {};
+    const unset = {};
+    for (const key of NUTRIENT_KEYS) {
+        if (body[key] === undefined) continue;
+        if (body[key] === null || body[key] === '') {
+            unset[key] = 1;
+            continue;
+        }
+        const n = Number(body[key]);
+        if (!Number.isFinite(n) || n < 0 || n > 500) {
+            return { ok: false, message: `Giá trị ${key} không hợp lệ (0–500 gram).` };
+        }
+        set[key] = Math.round(n * 10) / 10;
+    }
+    return { ok: true, set, unset };
+};
+
 const addMenuItem = async (req, res) => {
     try {
         const vendor = await Vendor.findOne({ owner: req.user.id });
@@ -441,6 +484,8 @@ const addMenuItem = async (req, res) => {
         const { name, price, description, imageUrl, category } = req.body;
         const cal = parseCaloriesInput(req.body.calories);
         if (!cal.ok) return res.status(400).json({ message: cal.message });
+        const nut = parseNutrients(req.body);
+        if (!nut.ok) return res.status(400).json({ message: nut.message });
 
         const newItem = new MenuItem({
             vendor: vendor._id,
@@ -450,7 +495,8 @@ const addMenuItem = async (req, res) => {
             imageUrl,
             category,
             isAvailable: true,
-            ...(cal.calories !== undefined && { calories: cal.calories })
+            ...(cal.calories !== undefined && { calories: cal.calories }),
+            ...nut.set
         });
 
         await newItem.save();
@@ -486,10 +532,16 @@ const updateMenuItem = async (req, res) => {
                 setFields.calories = cal.calories;
             }
         }
+        const nut = parseNutrients(req.body);
+        if (!nut.ok) return res.status(400).json({ message: nut.message });
+        Object.assign(setFields, nut.set);
+        Object.assign(unsetFields, nut.unset);
 
         let updateQuery = setFields;
         if (Object.keys(unsetFields).length) {
-            updateQuery = { $set: setFields, $unset: unsetFields };
+            updateQuery = Object.keys(setFields).length
+                ? { $set: setFields, $unset: unsetFields }
+                : { $unset: unsetFields };
         }
 
         const updatedItem = await MenuItem.findByIdAndUpdate(

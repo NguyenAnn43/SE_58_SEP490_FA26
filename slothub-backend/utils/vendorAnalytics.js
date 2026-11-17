@@ -8,7 +8,7 @@ const paidOrderMatch = (vendorId, dateRange = null) => {
     const match = {
         vendor: new mongoose.Types.ObjectId(vendorId),
         paymentStatus: 'Paid',
-        status: { $ne: 'Cancelled' }
+        status: { $nin: ['Cancelled', 'Rejected'] }
     };
     if (dateRange?.start || dateRange?.end) {
         match.createdAt = {};
@@ -241,7 +241,7 @@ const getVendorBestSelling = async (vendorId, startDate) => {
             $match: {
                 vendor: new mongoose.Types.ObjectId(vendorId),
                 paymentStatus: 'Paid',
-                status: { $ne: 'Cancelled' },
+                status: { $nin: ['Cancelled', 'Rejected'] },
                 createdAt: { $gte: startDate }
             }
         },

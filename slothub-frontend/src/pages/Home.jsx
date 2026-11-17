@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
-import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy, Clock } from 'lucide-react';
+import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy, Clock, Heart } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo'; 
 import WalletWidget from '../components/WalletWidget';
 import Footer from '../components/Footer';
@@ -437,6 +437,9 @@ const Home = () => {
                     </button>
                     <button onClick={() => { navigate('/orders'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <Receipt size={18} /> {t('nav.orders')}
+                    </button>
+                    <button onClick={() => { navigate('/favorites'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
+                      <Heart size={18} /> {t('nav.favorites')}
                     </button>
                     <button onClick={() => { navigate('/messages'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <MessageSquare size={18} /> {t('nav.messages')}

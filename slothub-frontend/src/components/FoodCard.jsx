@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Flame, Store, Star } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext';
+import FavoriteButton from './FavoriteButton';
 
 const FoodCard = ({ item, onAdd, onViewDetail }) => {
   const { t } = useLocale();
@@ -25,6 +26,13 @@ const FoodCard = ({ item, onAdd, onViewDetail }) => {
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+        {/* Nút yêu thích (sinh viên) — nằm trên lớp "Tạm hết" để vẫn bấm được */}
+        <FavoriteButton
+          menuItemId={item._id}
+          size={18}
+          className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm shadow-md hover:bg-white"
+        />
 
         {/* Badge Tạm Hết */}
         {isOutOfStock ? (

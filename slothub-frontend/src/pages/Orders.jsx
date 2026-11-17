@@ -72,7 +72,7 @@ const Orders = () => {
     setOrders(res.data);
   };
 
-  // Realtime: quầy chuyển đơn "Sẵn sàng" / quét QR-OTP xác nhận đã nhận món → cập nhật ngay
+  // Realtime: quầy chuyển đơn "Sẵn sàng" / quét QR-OTP xác nhận đã nhận món
   useEffect(() => {
     const userId = user?._id || user?.id;
     if (!userId) return undefined;
@@ -82,12 +82,10 @@ const Orders = () => {
       if (!noti?.orderId) return;
       api.get('/orders/my-orders').then((res) => setOrders(res.data)).catch(() => {});
 
-      if (noti.type === 'ORDER_COMPLETED') {
-        // Đóng popup mã nhận món của đúng đơn vừa được quét
+      // Popup thông báo do StudentOrderNotifier (toàn app) hiển thị — ở đây chỉ cập nhật danh sách
+      // và đóng popup mã nhận món của đơn vừa được nhận / bị từ chối
+      if (['ORDER_COMPLETED', 'ORDER_REJECTED', 'REFUND_FAILED'].includes(noti.type)) {
         setSelectedOrderQR((prev) => (prev && String(prev._id) === String(noti.orderId) ? null : prev));
-        appAlert(noti.message, { type: 'success', title: `✅ ${noti.title}` });
-      } else if (noti.type === 'ORDER_READY') {
-        appAlert(noti.message, { type: 'info', title: `🔔 ${noti.title}` });
       }
     };
 
@@ -95,7 +93,7 @@ const Orders = () => {
     return () => {
       s.off('student_notification', onStudentNotification);
     };
-  }, [user]);
+  }, [user, fetchBalance]);
 
   const openCancelModal = async (order) => {
     setCancelOrder(order);
@@ -130,16 +128,22 @@ const Orders = () => {
   };
 
   // Hàm chuyển đổi Trạng thái đơn hàng
-  const renderStatus = (status) => {
+  const renderStatus = (order) => {
+    // Pending tách 2 nghĩa: đã trả tiền → chờ quầy duyệt; chưa trả (payOS) → chờ thanh toán
+    const status = order.status === 'Pending'
+      ? (order.paymentStatus === 'Paid' ? 'PendingApproval' : 'PendingPayment')
+      : order.status;
     const label = t(`orders.status.${status}`) || t('orders.status.unknown');
     const styles = {
-      Pending: 'text-orange-500 bg-orange-50 border-orange-100',
+      PendingApproval: 'text-orange-500 bg-orange-50 border-orange-100',
+      PendingPayment: 'text-gray-500 bg-gray-100 border-gray-200',
       Processing: 'text-blue-500 bg-blue-50 border-blue-100',
       Ready: 'text-green-500 bg-green-50 border-green-200 animate-pulse',
       Completed: 'text-gray-500 bg-gray-100 border-gray-200',
       Cancelled: 'text-red-500 bg-red-50 border-red-100',
+      Rejected: 'text-red-600 bg-red-50 border-red-200',
     };
-    const icons = { Pending: Clock, Processing: ChefHat, Ready: CheckCircle2, Completed: CheckCircle2, Cancelled: XCircle };
+    const icons = { PendingApproval: Clock, PendingPayment: Clock, Processing: ChefHat, Ready: CheckCircle2, Completed: CheckCircle2, Cancelled: XCircle, Rejected: Ban };
     const Icon = icons[status] || Clock;
     const cls = styles[status] || 'text-gray-500 bg-gray-100 border-gray-200';
     return (
@@ -226,11 +230,10 @@ const Orders = () => {
             {orders.map(order => {
               // Điều kiện hiện nút mã QR: Đơn chưa hoàn thành và chưa hủy
               const pickupExpired = isPickupCodeExpired(order);
-              const canShowQR =
-                order.paymentStatus === 'Paid' &&
-                order.status !== 'Completed' &&
-                order.status !== 'Cancelled' &&
-                !pickupExpired;
+              // Mã nhận món chỉ dùng được khi quầy đã duyệt (Đang làm / Sẵn sàng)
+              const isApprovedActive = ['Processing', 'Ready'].includes(order.status);
+              const canShowQR = order.paymentStatus === 'Paid' && isApprovedActive && !pickupExpired;
+              const awaitingApproval = order.status === 'Pending' && order.paymentStatus === 'Paid';
               // Điều kiện hiện nút Đánh giá: Đã hoàn thành (Ăn xong)
               const canReview = order.status === 'Completed';
               const canReport = order.status !== 'Cancelled' && order.status !== 'Pending';
@@ -242,7 +245,7 @@ const Orders = () => {
               return (
                 <div key={order._id} className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow relative overflow-hidden">
                   
-                  <div className={`absolute left-0 top-0 bottom-0 w-2 rounded-l-[2rem] ${order.status === 'Completed' ? 'bg-gray-300' : order.status === 'Cancelled' ? 'bg-red-400' : 'bg-[#F27124]'}`}></div>
+                  <div className={`absolute left-0 top-0 bottom-0 w-2 rounded-l-[2rem] ${order.status === 'Completed' ? 'bg-gray-300' : ['Cancelled', 'Rejected'].includes(order.status) ? 'bg-red-400' : 'bg-[#F27124]'}`}></div>
 
                   <div className="flex justify-between items-start mb-4 border-b border-dashed border-gray-200 pb-4 pl-4">
                     <div>
@@ -258,7 +261,7 @@ const Orders = () => {
                         </p>
                       )}
                     </div>
-                    <div>{renderStatus(order.status)}</div>
+                    <div>{renderStatus(order)}</div>
                   </div>
 
                   <div className="pl-4 mb-4">
@@ -289,7 +292,7 @@ const Orders = () => {
                   <div className="flex items-center justify-between pl-4 pt-4 border-t border-gray-100">
                     <div className="flex flex-col">
                       <span className="text-xs text-gray-500 font-bold">Tổng thanh toán:</span>
-                      <span className={`text-xl font-black ${order.status === 'Cancelled' ? 'text-gray-400 line-through' : 'text-[#F27124]'}`}>
+                      <span className={`text-xl font-black ${['Cancelled', 'Rejected'].includes(order.status) ? 'text-gray-400 line-through' : 'text-[#F27124]'}`}>
                         {order.totalPrice.toLocaleString()}đ
                       </span>
                       {order.status === 'Cancelled' && order.refundAmount > 0 && (
@@ -302,6 +305,21 @@ const Orders = () => {
                       {order.status === 'Cancelled' && order.paymentStatus === 'Paid' && !order.refundAmount && (
                         <span className="text-xs font-bold text-red-500 mt-1">{t('orders.cancelNoRefund')}</span>
                       )}
+                      {order.status === 'Rejected' && (
+                        <span className="text-xs mt-1 max-w-xs">
+                          <span className="font-bold text-red-600">Lý do từ chối: </span>
+                          <span className="text-gray-600">{order.rejectReason}</span>
+                          <span className={`block font-bold mt-0.5 ${order.refundStatus === 'SUCCESS' ? 'text-green-600' : order.refundStatus === 'FAILED' ? 'text-red-500' : 'text-amber-600'}`}>
+                            {order.refundStatus === 'SUCCESS'
+                              ? `Đã hoàn ${Number(order.refundAmount || order.totalPrice).toLocaleString('vi-VN')}đ vào ví SlotHub`
+                              : order.refundStatus === 'FAILED'
+                                ? 'Hoàn tiền gặp lỗi — quản trị viên đang xử lý lại'
+                                : order.refundStatus === 'NOT_REQUIRED'
+                                  ? 'Không phát sinh hoàn tiền (chưa thanh toán)'
+                                  : 'Đang hoàn tiền vào ví SlotHub...'}
+                          </span>
+                        </span>
+                      )}
                     </div>
 
                     {/* HIỂN THỊ NÚT TƯƠNG ỨNG VỚI TRẠNG THÁI */}
@@ -313,12 +331,14 @@ const Orders = () => {
                         <QrCode size={18} /> Mã nhận món
                       </button>
                     )}
-                    {order.paymentStatus === 'Paid' &&
-                      order.status !== 'Completed' &&
-                      order.status !== 'Cancelled' &&
-                      pickupExpired && (
+                    {order.paymentStatus === 'Paid' && isApprovedActive && pickupExpired && (
                       <span className="text-xs font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">
                         Mã nhận món đã hết hạn
+                      </span>
+                    )}
+                    {awaitingApproval && (
+                      <span className="text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 px-3 py-2 rounded-xl">
+                        Mã nhận món hiện sau khi quầy duyệt đơn
                       </span>
                     )}
                     

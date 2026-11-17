@@ -66,7 +66,9 @@ const finalizePaidOrders = async (req, orders, transactionId) => {
 
         order.paymentStatus = 'Paid';
 
-        order.status = 'Processing';
+        // Đã thanh toán → vẫn ở Pending, chờ chủ quầy duyệt (Approve/Reject)
+        order.status = 'Pending';
+        order.approvalStatus = 'PENDING';
 
         if (transactionId) order.transactionId = transactionId;
 
@@ -82,13 +84,13 @@ const finalizePaidOrders = async (req, orders, transactionId) => {
 
             fromStatus: 'Pending',
 
-            toStatus: 'Processing',
+            toStatus: 'Pending',
 
             changedBy: order.user._id || order.user,
 
             changedByRole: 'student',
 
-            note: 'PayOS thanh toán thành công'
+            note: 'PayOS thanh toán thành công — chờ quầy duyệt'
 
         });
 
@@ -177,7 +179,7 @@ const createPaymentLink = async (req, res) => {
 
                 paymentStatus: 'Unpaid',
 
-                status: { $ne: 'Cancelled' }
+                status: { $nin: ['Cancelled', 'Rejected'] }
 
             });
 

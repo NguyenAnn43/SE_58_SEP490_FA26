@@ -10,6 +10,8 @@ const vendorSchema = new mongoose.Schema({
     isPaused: { type: Boolean, default: false },
     pauseReason: { type: String, default: '', trim: true, maxlength: 200 },
     pausedAt: { type: Date, default: null },
+    /** Hẹn giờ tự động mở lại (null = tắt đến khi chủ quầy tự bật) */
+    pausedUntil: { type: Date, default: null },
     openTime: { type: String, default: '07:00' },
     closeTime: { type: String, default: '21:00' }, // Để 21:00 cho SV test dễ
     category: { type: String, default: 'Cơm' }

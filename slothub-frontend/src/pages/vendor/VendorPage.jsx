@@ -5,8 +5,9 @@ import { PortalThemeProvider, usePortalTheme } from '../../context/PortalThemeCo
 import api from '../../api/axios';
 import {
   LayoutDashboard, ShoppingBag, UtensilsCrossed, Wallet,
-  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Volume2, VolumeX, Gift, Menu, X
+  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Gift, Menu, X, BarChart3
 } from 'lucide-react';
+import VendorDemandStats from './subpages/VendorDemandStats';
 
 import VendorMenu from './subpages/VendorMenu';
 import VendorDashboard from './subpages/VendorDashboard';
@@ -20,20 +21,6 @@ import BrandLogo from '../../components/BrandLogo';
 import MessagingCenter from '../../components/messaging/MessagingCenter';
 import PortalThemeToggle from '../../components/PortalThemeToggle';
 import { connectUserSocket } from '../../utils/socket';
-import { playNewOrderBell, unlockNotificationAudio } from '../../utils/notificationSound';
-import {
-  isVoiceAlertEnabled,
-  setVoiceAlertEnabled,
-  speakNewOrderAlert,
-  speakVoicePreview,
-  unlockNotificationVoice,
-  isVoiceUnlocked,
-} from '../../utils/notificationVoice';
-
-const unlockAllNotificationMedia = () => {
-  unlockNotificationAudio();
-  unlockNotificationVoice();
-};
 
 const VendorPageContent = () => {
   const { user, logout } = useContext(AuthContext);
@@ -47,8 +34,6 @@ const VendorPageContent = () => {
   const [forumEligible, setForumEligible] = useState(0);
   const [time, setTime] = useState(new Date());
   const [bellRinging, setBellRinging] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(() => isVoiceAlertEnabled());
-  const [voiceReady, setVoiceReady] = useState(() => isVoiceUnlocked());
   const [orderToast, setOrderToast] = useState(null);
   const [payoutUnread, setPayoutUnread] = useState(0);
   const [walletRefreshKey, setWalletRefreshKey] = useState(0);
@@ -61,19 +46,6 @@ const VendorPageContent = () => {
       navigate('/');
     }
   }, [user, navigate]);
-
-  useEffect(() => {
-    const onFirstInteraction = async () => {
-      await unlockAllNotificationMedia();
-      setVoiceReady(isVoiceUnlocked());
-    };
-    document.addEventListener('click', onFirstInteraction, { once: true });
-    document.addEventListener('keydown', onFirstInteraction, { once: true });
-    return () => {
-      document.removeEventListener('click', onFirstInteraction);
-      document.removeEventListener('keydown', onFirstInteraction);
-    };
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 60000);
@@ -156,8 +128,7 @@ const VendorPageContent = () => {
       announcedOrders.current.add(orderKey);
       window.setTimeout(() => announcedOrders.current.delete(orderKey), 20000);
 
-      playNewOrderBell();
-      speakNewOrderAlert(payload);
+      // Đơn mới: chỉ hiện popup + rung icon chuông, không phát âm thanh / giọng đọc
       setBellRinging(true);
       window.setTimeout(() => setBellRinging(false), 900);
 
@@ -223,6 +194,7 @@ const VendorPageContent = () => {
     { id: 'orders', label: 'Quản lý Đơn hàng', icon: <ShoppingBag size={20} /> },
     { id: 'pickup', label: 'Quét nhận món', icon: <ScanLine size={20} /> },
     { id: 'menu', label: 'Quản lý Thực đơn', icon: <UtensilsCrossed size={20} /> },
+    { id: 'stats', label: 'Thống kê & Dự báo', icon: <BarChart3 size={20} /> },
     { id: 'forum', label: 'Diễn đàn & Voucher', icon: <Gift size={20} /> },
     { id: 'wallet', label: 'Ví & Doanh thu', icon: <Wallet size={20} /> },
     { id: 'messages', label: 'Tin nhắn', icon: <MessageSquare size={20} /> },
@@ -285,7 +257,6 @@ const VendorPageContent = () => {
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  unlockAllNotificationMedia();
                   setActiveTab(item.id);
                   setIsSidebarOpen(false);
                 }}
@@ -351,29 +322,7 @@ const VendorPageContent = () => {
             <PortalThemeToggle />
             <button
               type="button"
-              onClick={async () => {
-                await unlockAllNotificationMedia();
-                const next = !voiceOn;
-                setVoiceOn(next);
-                setVoiceAlertEnabled(next);
-                if (next) {
-                  await speakVoicePreview();
-                }
-                setVoiceReady(isVoiceUnlocked());
-              }}
-              title={voiceOn ? 'Tắt đọc thông báo đơn (bấm để nghe thử)' : 'Bật đọc thông báo đơn'}
-              className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${
-                voiceOn ? 'portal-icon-btn-active text-[#F27124]' : 'portal-icon-btn opacity-60'
-              }`}
-            >
-              {voiceOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                unlockAllNotificationMedia();
-                setActiveTab('notifications');
-              }}
+              onClick={() => setActiveTab('notifications')}
               className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all relative ${
                 activeTab === 'notifications' ? 'portal-icon-btn-active' : 'portal-icon-btn'
               } ${bellRinging ? 'animate-bell-ring' : ''}`}
@@ -399,11 +348,6 @@ const VendorPageContent = () => {
         </header>
 
         <div className="portal-main-scroll flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar relative">
-          {voiceOn && !voiceReady && (
-            <div className="mb-4 rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <strong>Bật giọng đọc:</strong> Nhấn nút loa 🔊 hoặc click bất kỳ đâu trên trang để kích hoạt âm thanh đọc đơn.
-            </div>
-          )}
           {orderToast && (
             <div
               role="status"
@@ -424,11 +368,6 @@ const VendorPageContent = () => {
                 <div className="min-w-0 flex-1 pt-0.5">
                   <p className="font-black text-slate-900">{orderToast.title}</p>
                   <p className="mt-1 text-sm leading-relaxed text-slate-600">{orderToast.message}</p>
-                  {voiceOn && orderToast.type !== 'PAYOUT_CONFIRMED' && (
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-[#F27124]">
-                      Đang đọc thông báo...
-                    </p>
-                  )}
                 </div>
                 <button
                   type="button"
@@ -467,6 +406,7 @@ const VendorPageContent = () => {
             )}
             {activeTab === 'pickup' && <VendorQrPickup onOrdersRefresh={() => setOrdersRefreshKey((k) => k + 1)} />}
             {activeTab === 'menu' && <VendorMenu />}
+            {activeTab === 'stats' && <VendorDemandStats />}
             {activeTab === 'forum' && <VendorForum />}
             {activeTab === 'wallet' && <VendorWallet refreshKey={walletRefreshKey} />}
             {activeTab === 'settings' && <VendorSettings />}

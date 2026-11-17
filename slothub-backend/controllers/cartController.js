@@ -5,7 +5,7 @@ const { getVendorStatus } = require('../utils/vendorHours');
 
 const CART_POPULATE = {
     path: 'items.menuItem',
-    populate: { path: 'vendor', select: 'name openTime closeTime isActive isPaused pauseReason' }
+    populate: { path: 'vendor', select: 'name openTime closeTime isActive isPaused pauseReason pausedUntil' }
 };
 
 const buildCartResponse = (cart) => {
