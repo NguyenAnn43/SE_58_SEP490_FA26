@@ -5,9 +5,9 @@ import { PortalThemeProvider, usePortalTheme } from '../../context/PortalThemeCo
 import api from '../../api/axios';
 import {
   LayoutDashboard, ShoppingBag, UtensilsCrossed, Wallet,
-  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Gift, Menu, X, BarChart3
-} from 'lucide-react';
+  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Gift, Menu, X, BarChart3, Package } from 'lucide-react';
 import VendorDemandStats from './subpages/VendorDemandStats';
+import VendorMealPlans from './subpages/VendorMealPlans';
 
 import VendorMenu from './subpages/VendorMenu';
 import VendorDashboard from './subpages/VendorDashboard';
@@ -195,6 +195,7 @@ const VendorPageContent = () => {
     { id: 'pickup', label: 'Quét nhận món', icon: <ScanLine size={20} /> },
     { id: 'menu', label: 'Quản lý Thực đơn', icon: <UtensilsCrossed size={20} /> },
     { id: 'stats', label: 'Thống kê & Dự báo', icon: <BarChart3 size={20} /> },
+    { id: 'mealplans', label: 'Gói ăn tuần/tháng', icon: <Package size={20} /> },
     { id: 'forum', label: 'Diễn đàn & Voucher', icon: <Gift size={20} /> },
     { id: 'wallet', label: 'Ví & Doanh thu', icon: <Wallet size={20} /> },
     { id: 'messages', label: 'Tin nhắn', icon: <MessageSquare size={20} /> },
@@ -407,6 +408,7 @@ const VendorPageContent = () => {
             {activeTab === 'pickup' && <VendorQrPickup onOrdersRefresh={() => setOrdersRefreshKey((k) => k + 1)} />}
             {activeTab === 'menu' && <VendorMenu />}
             {activeTab === 'stats' && <VendorDemandStats />}
+            {activeTab === 'mealplans' && <VendorMealPlans />}
             {activeTab === 'forum' && <VendorForum />}
             {activeTab === 'wallet' && <VendorWallet refreshKey={walletRefreshKey} />}
             {activeTab === 'settings' && <VendorSettings />}

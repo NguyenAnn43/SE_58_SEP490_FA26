@@ -19,6 +19,7 @@ const vi = {
     profile: 'Hồ sơ cá nhân',
     orders: 'Lịch sử đơn hàng',
     favorites: 'Món yêu thích',
+    mealPlans: 'Gói ăn tuần / tháng',
     messages: 'Tin nhắn & Report quầy',
     forum: 'Diễn đàn món ngon',
     wallet: 'Ví SlotHub',

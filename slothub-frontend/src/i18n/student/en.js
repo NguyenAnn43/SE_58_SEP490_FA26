@@ -18,6 +18,7 @@ const en = {
     logout: 'Sign out',
     profile: 'Profile',
     orders: 'Order history',
+    mealPlans: 'Weekly / monthly meal plans',
     favorites: 'Favorites',
     messages: 'Messages & reports',
     forum: 'Food forum',

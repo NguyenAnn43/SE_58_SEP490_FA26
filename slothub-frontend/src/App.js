@@ -19,6 +19,7 @@ import Profile from './pages/Profile';
 import StudentMessages from './pages/StudentMessages';
 import Forum from './pages/Forum';
 import Favorites from './pages/Favorites';
+import MealPlans from './pages/MealPlans';
 import StudentOrderNotifier from './components/StudentOrderNotifier';
 import ChatWidget from './components/ChatWidget';
 
@@ -111,6 +112,7 @@ function App() {
               <Route path="/messages" element={<StudentMessages />} />
               <Route path="/forum" element={<Forum />} />
               <Route path="/favorites" element={<Favorites />} />
+              <Route path="/meal-plans" element={<MealPlans />} />
               
               {/* 🌟 ROUTE DÀNH CHO NGƯỜI BÁN (VENDOR) */}
               <Route path="/vendor/*" element={<VendorPage />} />

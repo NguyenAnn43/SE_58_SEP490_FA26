@@ -30,7 +30,9 @@ const notificationSchema = new mongoose.Schema({
             'NEW_REVIEW', 'REPORT', 'SYSTEM', 'ORDER_READY', 'ORDER_COMPLETED', 'PICKUP',
             'PAYOUT_CONFIRMED', 'WITHDRAW_CONFIRMED',
             // Duyệt / từ chối đơn + hoàn tiền
-            'ORDER_APPROVED', 'ORDER_REJECTED', 'REFUND_SUCCESS', 'REFUND_FAILED'
+            'ORDER_APPROVED', 'ORDER_REJECTED', 'REFUND_SUCCESS', 'REFUND_FAILED',
+            // Gói ăn tuần / tháng
+            'MEAL_PLAN'
         ],
         default: 'SYSTEM'
     },
