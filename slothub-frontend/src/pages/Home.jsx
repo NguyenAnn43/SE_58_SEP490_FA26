@@ -598,8 +598,8 @@ const Home = () => {
           {/* ===== BÁN CHẠY HÔM NAY + ĐANG GIẢM GIÁ (chỉ ở màn hình chính, không khi đang tìm / lọc) ===== */}
           {showHighlights && bestsellerItems.length > 0 && (
             <HighlightStrip
-              title={bestsellerPeriod === 'week' ? t('home.bestsellerWeekTitle') : t('home.bestsellerTitle')}
-              hint={bestsellerPeriod === 'week' ? t('home.bestsellerWeekHint') : ''}
+              title={{ week: t('home.bestsellerWeekTitle'), month: t('home.bestsellerMonthTitle') }[bestsellerPeriod] || t('home.bestsellerTitle')}
+              hint={{ week: t('home.bestsellerWeekHint'), month: t('home.bestsellerMonthHint') }[bestsellerPeriod] || ''}
               items={bestsellerItems}
               onAdd={handleAddToCart}
               onViewDetail={(it) => setDetailItem(it)}

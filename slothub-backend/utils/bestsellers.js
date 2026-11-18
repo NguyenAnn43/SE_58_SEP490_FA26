@@ -7,8 +7,10 @@ const { VALID_STATUSES, startOfVnDay } = require('./demandStats');
  * Chỉ tính ĐƠN HỢP LỆ giống trang Thống kê của quầy: đã thanh toán + quầy đã nhận làm
  * (Processing / Ready / Completed). Xếp theo tổng số phần bán, hoà thì theo số đơn.
  *
- * Kỳ tính: hôm nay (giờ Việt Nam, từ 00:00). Sáng sớm chưa có đơn hợp lệ nào thì dùng
- * 7 ngày gần nhất (period = 'week') để trang chủ không bị trống.
+ * Kỳ tính (lùi dần cho đến khi có dữ liệu, để trang chủ không bị trống):
+ *   'today' — hôm nay (giờ Việt Nam, từ 00:00)
+ *   'week'  — 7 ngày gần nhất (VD sáng sớm chưa có đơn hợp lệ nào)
+ *   'month' — 30 ngày gần nhất (căng tin vắng đơn cả tuần, VD nghỉ lễ)
  * Kết quả được cache 60 giây — trang chủ gọi nhiều nhưng số liệu không cần tức thời.
  */
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,21 +35,26 @@ const aggregateSold = (from) => Order.aggregate([
 ]);
 
 /**
- * @returns {Promise<{ period: 'today'|'week'|null, ranking: Array<{ menuItemId: string, sold: number, orderCount: number, rank: number }> }>}
+ * @returns {Promise<{ period: 'today'|'week'|'month'|null, ranking: Array<{ menuItemId: string, sold: number, orderCount: number, rank: number }> }>}
  */
 const getBestsellerRanking = async () => {
     if (cache.data && Date.now() - cache.at < CACHE_MS) return cache.data;
 
-    const now = new Date();
-    let period = 'today';
-    let rows = await aggregateSold(startOfVnDay(now));
-    if (!rows.length) {
-        period = 'week';
-        rows = await aggregateSold(new Date(startOfVnDay(now).getTime() - 6 * DAY_MS));
+    const today = startOfVnDay(new Date());
+    const periods = [
+        ['today', today],
+        ['week', new Date(today.getTime() - 6 * DAY_MS)],
+        ['month', new Date(today.getTime() - 29 * DAY_MS)],
+    ];
+    let period = null;
+    let rows = [];
+    for (const [name, from] of periods) {
+        rows = await aggregateSold(from);
+        if (rows.length) { period = name; break; }
     }
 
     const data = {
-        period: rows.length ? period : null,
+        period,
         ranking: rows
             .filter((r) => r._id)
             .slice(0, MAX_RANK)

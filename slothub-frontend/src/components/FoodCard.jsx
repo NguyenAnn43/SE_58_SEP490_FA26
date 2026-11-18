@@ -68,7 +68,7 @@ const FoodCard = ({ item, onAdd, onViewDetail }) => {
             )}
             {item.bestsellerRank && (
               <span className="bg-amber-400 text-gray-900 text-[11px] font-black px-2 py-1 rounded-lg shadow-md">
-                🔥 #{item.bestsellerRank} {item.bestsellerPeriod === 'week' ? t('food.bestsellerWeek') : t('food.bestsellerToday')}
+                🔥 #{item.bestsellerRank} {{ week: t('food.bestsellerWeek'), month: t('food.bestsellerMonth') }[item.bestsellerPeriod] || t('food.bestsellerToday')}
               </span>
             )}
           </div>
