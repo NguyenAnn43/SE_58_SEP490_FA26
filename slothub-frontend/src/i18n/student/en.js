@@ -368,6 +368,13 @@ const en = {
     writeReview: 'Share a dish',
     topRank: 'Rank {{rank}}',
   },
+  stallReviews: {
+    title: 'Stall reviews',
+    empty: 'No reviews yet. After picking up your order you can rate the stall in Order history.',
+    count: '{{count}} reviews',
+    viewAll: 'See reviews',
+    close: 'Close',
+  },
 };
 
 export default en;

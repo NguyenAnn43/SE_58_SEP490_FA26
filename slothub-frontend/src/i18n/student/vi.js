@@ -368,6 +368,13 @@ const vi = {
     writeReview: 'Chia sẻ món ngon',
     topRank: 'Hạng {{rank}}',
   },
+  stallReviews: {
+    title: 'Đánh giá quầy',
+    empty: 'Quầy chưa có đánh giá nào. Nhận món xong, bạn có thể đánh giá trong Lịch sử đơn hàng.',
+    count: '{{count}} đánh giá',
+    viewAll: 'Xem đánh giá',
+    close: 'Đóng',
+  },
 };
 
 export default vi;

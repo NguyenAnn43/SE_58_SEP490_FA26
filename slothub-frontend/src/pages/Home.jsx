@@ -12,6 +12,7 @@ import FoodDetailModal from '../components/FoodDetailModal';
 import { CART_UPDATED_EVENT } from '../components/ChatWidget';
 import PickupSlotFilter from '../components/PickupSlotFilter';
 import VendorStallFilter from '../components/VendorStallFilter';
+import StallReviewsPanel from '../components/StallReviewsPanel';
 import { pickDefaultSlotId, MENU_VIEW_SLOT_STORAGE_KEY } from '../utils/vendorHours';
 import { useLocale } from '../context/LocaleContext';
 import LanguageToggle from '../components/LanguageToggle';
@@ -631,6 +632,12 @@ const Home = () => {
               selectedVendorId={selectedVendorId}
               onSelect={setSelectedVendorId}
             />
+            {selectedVendorId && (
+              <StallReviewsPanel
+                vendorId={selectedVendorId}
+                vendorName={stallList.find((v) => String(v._id) === selectedVendorId)?.name}
+              />
+            )}
             <PickupSlotFilter
               variant="menuView"
               timeSlots={timeSlots}
@@ -848,6 +855,14 @@ const Home = () => {
             selectedVendorId={selectedVendorId}
             onSelect={setSelectedVendorId}
           />
+
+          {selectedVendorId && (
+            <StallReviewsPanel
+              compact
+              vendorId={selectedVendorId}
+              vendorName={stallList.find((v) => String(v._id) === selectedVendorId)?.name}
+            />
+          )}
 
           <PickupSlotFilter
             layout="vertical"
