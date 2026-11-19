@@ -177,4 +177,35 @@ const notifyVendorMealPlan = async (req, sub, { title, message, orderId = null }
     }
 };
 
-module.exports = { notifyVendorNewOrder, notifyVendorNewReview, buildNewOrderSpeakText, notifyVendorPayoutConfirmed, notifyVendorMealPlan };
+/** UC-28: báo chủ quầy khi có đánh giá chất lượng phục vụ của quầy */
+const notifyVendorNewStallReview = async (req, vendorId, review, student) => {
+    try {
+        const vendor = await Vendor.findById(vendorId);
+        if (!vendor?.owner) return null;
+
+        const who = student?.name || 'Sinh viên';
+        const stars = '⭐'.repeat(Math.min(5, Math.max(1, Number(review.rating) || 5)));
+        const snippet = (review.comment || '').slice(0, 120);
+
+        const noti = await Notification.create({
+            audience: 'vendor',
+            recipientId: vendor.owner,
+            title: 'Đánh giá quầy mới',
+            message: `${who} ${stars} · "${vendor.name}": ${snippet}`,
+            type: 'NEW_REVIEW',
+            actionLink: 'menu',
+            isRead: false,
+        });
+
+        const io = req?.app?.get('socketio');
+        if (io) {
+            io.emit(`vendor_notification_${vendor.owner}`, noti);
+        }
+        return noti;
+    } catch (err) {
+        console.error('[notifyVendorNewStallReview]', err.message);
+        return null;
+    }
+};
+
+module.exports = { notifyVendorNewOrder, notifyVendorNewReview, notifyVendorNewStallReview, buildNewOrderSpeakText, notifyVendorPayoutConfirmed, notifyVendorMealPlan };

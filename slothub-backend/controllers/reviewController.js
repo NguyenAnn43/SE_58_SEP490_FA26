@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
+const { notifyVendorNewStallReview } = require('../utils/vendorNotify');
 const Order = require('../models/Order'); // Import bảng Order mới
 
 // 1. [POST] Gửi đánh giá (Có hỗ trợ up nhiều ảnh hộp cơm)
@@ -51,6 +52,7 @@ const createReview = async (req, res) => {
             images: Array.isArray(images) ? images : []
         });
         await newReview.save();
+        await notifyVendorNewStallReview(req, vendorId, newReview, req.user);
 
         res.status(201).json({ message: 'Cảm ơn bạn đã đánh giá gian hàng!', data: newReview });
     } catch (error) {
