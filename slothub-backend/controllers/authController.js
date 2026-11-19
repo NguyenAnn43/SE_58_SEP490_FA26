@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { notifyAdmin } = require("../utils/adminNotify");
 const generateToken = (user) => {
   return jwt.sign(
