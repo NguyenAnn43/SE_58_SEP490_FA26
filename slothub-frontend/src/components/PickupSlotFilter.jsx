@@ -12,6 +12,7 @@ const PickupSlotFilter = ({
   onSelect,
   hideClosed,
   onToggleHideClosed,
+  closedVendorNames = null,
   compact = false,
   variant = 'menuView',
   layout = 'horizontal',
@@ -46,6 +47,13 @@ const PickupSlotFilter = ({
           </label>
         )}
       </div>
+      {onToggleHideClosed && selectedSlotId && Array.isArray(closedVendorNames) && (
+        <p className={`-mt-2 mb-3 text-[11px] font-semibold leading-snug ${closedVendorNames.length ? 'text-amber-700' : 'text-gray-400'}`}>
+          {closedVendorNames.length
+            ? `${hideClosed ? 'Đang ẩn' : 'Có'} ${closedVendorNames.length} quầy không phục vụ khung này: ${closedVendorNames.join(', ')}`
+            : 'Mọi quầy đều phục vụ khung này — không có quầy nào để ẩn.'}
+        </p>
+      )}
 
       <div
         className={

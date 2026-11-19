@@ -23,8 +23,8 @@ const attachBestseller = (items, { period, ranking }) => {
  * → còn lại giữ thứ tự cũ. Món của quầy đóng / hết hàng luôn ở cuối.
  */
 const compareForDisplay = (a, b) => {
-    const orderableA = a.vendorIsOpen !== false && (a.countInStock ?? 1) > 0;
-    const orderableB = b.vendorIsOpen !== false && (b.countInStock ?? 1) > 0;
+    const orderableA = a.isAvailable !== false && a.vendorIsOpen !== false && (a.countInStock ?? 1) > 0;
+    const orderableB = b.isAvailable !== false && b.vendorIsOpen !== false && (b.countInStock ?? 1) > 0;
     if (orderableA !== orderableB) return orderableA ? -1 : 1;
     if (a.discountActive !== b.discountActive) return a.discountActive ? -1 : 1;
     if (a.discountActive && b.discountActive && a.discountPercent !== b.discountPercent) {
@@ -47,7 +47,8 @@ const getAllMenuItems = async (req, res) => {
         }
 
         const [menu, bestsellers] = await Promise.all([
-            MenuItem.find({ isAvailable: true }).populate('vendor', VENDOR_FIELDS),
+            // Trả cả món chủ quầy đã tắt (isAvailable=false) → FE vẫn hiện, gắn nhãn "Tạm hết món", không cho đặt
+            MenuItem.find({}).populate('vendor', VENDOR_FIELDS),
             getBestsellerRanking(),
         ]);
         const now = new Date();
@@ -62,6 +63,7 @@ const getAllMenuItems = async (req, res) => {
                 vendorOpenNow: statusNow.isOpen,
                 vendorStatusMessage: statusInSlot.message,
                 vendorStatusNowMessage: statusNow.message,
+                vendorClosedByNow: statusNow.closedBy || (statusNow.isOpen ? null : 'hours'),
                 ...(slotOpts.slotStart && {
                     pickupSlotLabel: `${slotOpts.slotStart} – ${slotOpts.slotEnd}`
                 })
@@ -114,7 +116,7 @@ const getBestsellers = async (req, res) => {
 
 const getVendorMenu = async (req, res) => {
     try {
-        const menu = await MenuItem.find({ vendor: req.params.vendorId, isAvailable: true });
+        const menu = await MenuItem.find({ vendor: req.params.vendorId }).sort({ isAvailable: -1 });
         const now = new Date();
         res.status(200).json(menu.map((m) => withPricing(m, now)));
     } catch (error) {

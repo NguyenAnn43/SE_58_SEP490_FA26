@@ -18,6 +18,44 @@ import LanguageToggle from '../components/LanguageToggle';
 
 const CATEGORY_ALL = 'Tất cả';
 
+/** Tách chuỗi thành các từ: giữ dấu (để "gà" ≠ "gạo") + bản bỏ dấu */
+const toWords = (str) => String(str || '')
+  .normalize('NFC').toLowerCase()
+  .split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  .map((w) => ({ exact: w, plain: normalizeStr(w) }));
+
+/**
+ * 1 từ khoá khớp 1 từ trong văn bản khi từ đó BẮT ĐẦU bằng từ khoá
+ * (gõ dở "bur" vẫn ra "burger", nhưng "ga" không khớp giữa chữ "Granola"/"Mega").
+ * Có gõ dấu → so đúng dấu ("gà" chỉ ra "gà"); không gõ dấu → bỏ qua dấu ("ga" ra "gà", "gạo").
+ */
+const wordMatches = (q, words) => {
+  const accented = q.exact !== q.plain;
+  return words.some((w) => (accented ? w.exact.startsWith(q.exact) : w.plain.startsWith(q.plain)));
+};
+
+/**
+ * Lọc theo từ khoá, ưu tiên TÊN MÓN:
+ *  1) mọi từ khoá khớp tên món, hoặc có ít nhất 1 từ khớp tên món và các từ còn lại khớp tên quầy / danh mục
+ *     ("burger campus" → Burger của Gà Rán & Burger Campus);
+ *  2) không có món nào như vậy → mới tìm theo tên quầy / danh mục ("bánh mì hội an" → cả quầy).
+ */
+const searchItems = (items, term) => {
+  const queries = toWords(term);
+  if (!queries.length) return items;
+  const scored = items.map((item) => {
+    const nameWords = toWords(item.name);
+    const otherWords = toWords(`${item.vendor?.name || ''} ${item.category || ''}`);
+    const inName = queries.map((q) => wordMatches(q, nameWords));
+    const inOther = queries.map((q) => wordMatches(q, otherWords));
+    const byName = inName.some(Boolean) && queries.every((_, i) => inName[i] || inOther[i]);
+    const byOther = queries.every((_, i) => inName[i] || inOther[i]);
+    return { item, byName, byOther };
+  });
+  const byName = scored.filter((x) => x.byName);
+  return (byName.length ? byName : scored.filter((x) => x.byOther)).map((x) => x.item);
+};
+
 const normalizeStr = (str) => {
   if (!str) return '';
   return str
@@ -32,7 +70,19 @@ const normalizeStr = (str) => {
 };
 
 /** Món đặt được ngay trong khung giờ đang xem (quầy mở + còn hàng) */
-const isOrderable = (item) => item.vendorIsOpen !== false && item.countInStock !== 0;
+/** Nhãn trạng thái quầy hiện cạnh giờ mở cửa (theo giờ hiện tại + khung giờ đang xem) */
+const getVendorBadge = (item) => {
+  if (!item) return null;
+  if (item.vendorOpenNow === false) {
+    if (item.vendorClosedByNow === 'vendor_pause') return { label: 'Tạm nghỉ', cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', title: item.vendorStatusNowMessage };
+    if (item.vendorClosedByNow === 'admin') return { label: 'Tạm ngưng', cls: 'bg-gray-100 text-gray-600 border-gray-200', dot: 'bg-gray-400', title: item.vendorStatusNowMessage };
+    return { label: 'Đã đóng cửa', cls: 'bg-red-50 text-red-600 border-red-200', dot: 'bg-red-500', title: item.vendorStatusNowMessage };
+  }
+  if (item.vendorIsOpen === false) return { label: 'Mở cửa · không phục vụ khung đã chọn', cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', title: item.vendorStatusMessage };
+  return { label: 'Đang mở cửa', cls: 'bg-green-50 text-green-700 border-green-200', dot: 'bg-green-500 animate-pulse', title: 'Quầy đang nhận đơn' };
+};
+
+const isOrderable = (item) => item.isAvailable !== false && item.vendorIsOpen !== false && item.countInStock !== 0;
 
 /** Dải món nổi bật cuộn ngang: "Bán chạy hôm nay", "Đang giảm giá" */
 const HighlightStrip = ({ title, hint, items, onAdd, onViewDetail }) => (
@@ -73,8 +123,21 @@ const Home = () => {
   /** Quầy đang mở rộng để xem món (mặc định thu gọn hết) */
   const [expandedVendorIds, setExpandedVendorIds] = useState(() => new Set());
 
+  /** Quầy người dùng tự thu gọn khi đang tìm kiếm / lọc 1 quầy (lúc đó quầy được mở sẵn) */
+  const [collapsedVendorIds, setCollapsedVendorIds] = useState(() => new Set());
+  const isAutoExpand = Boolean(searchTerm.trim()) || Boolean(selectedVendorId);
+
+  // Đổi quầy đang lọc / từ khoá → mở sẵn lại như mặc định
+  useEffect(() => {
+    setCollapsedVendorIds(new Set());
+  }, [selectedVendorId, searchTerm]);
+
+  const isVendorExpanded = (vendorId) => (isAutoExpand
+    ? !collapsedVendorIds.has(vendorId)
+    : expandedVendorIds.has(vendorId));
+
   const toggleVendorExpanded = (vendorId) => {
-    setExpandedVendorIds((prev) => {
+    (isAutoExpand ? setCollapsedVendorIds : setExpandedVendorIds)((prev) => {
       const next = new Set(prev);
       if (next.has(vendorId)) next.delete(vendorId);
       else next.add(vendorId);
@@ -215,7 +278,7 @@ const Home = () => {
       const res = await api.post('/cart/add', { menuItemId, quantity: change });
       setCart(res.data?.cart || res.data);
     } catch (err) {
-      alert(err.response?.data?.message || t('home.qtyError'));
+      alert([err.response?.data?.message || t('home.qtyError'), err.response?.data?.detail].filter(Boolean).join(' '));
     }
   };
 
@@ -226,20 +289,14 @@ const Home = () => {
     } catch (err) {}
   };
 
-  const filteredItems = menuItems.filter((item) => {
+  const filteredItems = searchItems(menuItems.filter((item) => {
     const matchCategory = selectedCategory === CATEGORY_ALL || item.category === selectedCategory;
     const vendorId = String(item.vendor?._id || item.vendor || '');
     const matchVendor = !selectedVendorId || vendorId === selectedVendorId;
     const matchSlot = !selectedSlotId || !hideClosedForSlot || item.vendorIsOpen !== false;
 
-    // Tìm theo từng từ: món khớp khi chứa đủ mọi từ khóa (ở tên món, tên quầy hoặc danh mục)
-    // VD "cơm gà", "gà cơm", "com  ga" đều ra "Cơm Gà Nướng"
-    const searchWords = normalizeStr(searchTerm).split(' ').filter(Boolean);
-    const haystack = [item.name, item.vendor?.name, item.category].map(normalizeStr).join(' ');
-    const matchSearch = searchWords.every((w) => haystack.includes(w));
-
-    return matchCategory && matchVendor && matchSlot && matchSearch;
-  });
+    return matchCategory && matchVendor && matchSlot;
+  }), searchTerm);
 
   // ========== BÁN CHẠY + GIẢM GIÁ (API đã gắn bestsellerRank và sắp món giảm giá lên đầu) ==========
   const showHighlights = !searchTerm.trim() && selectedCategory === CATEGORY_ALL && !selectedVendorId;
@@ -296,6 +353,11 @@ const Home = () => {
     });
   }, [filteredItems]);
   // ==================================================================
+
+  /** Các quầy KHÔNG phục vụ khung giờ đang chọn (hiện cạnh ô "Ẩn quầy đóng") */
+  const closedVendorNamesInSlot = selectedSlotId
+    ? [...new Set(menuItems.filter((i) => i.vendorIsOpen === false).map((i) => i.vendor?.name).filter(Boolean))]
+    : null;
 
   const closedHiddenCount =
     selectedSlotId && hideClosedForSlot
@@ -474,6 +536,10 @@ const Home = () => {
                     <button onClick={() => { navigate('/profile'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <UserCircle size={18} /> {t('nav.profile')}
                     </button>
+                    {/* Mở cửa sổ Ví SlotHub ngay trên trang chủ (giống bấm ô số dư trên thanh đầu) */}
+                    <button onClick={() => { setIsWalletOpen(true); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
+                      <Wallet size={18} /> {t('nav.wallet')}
+                    </button>
                     <button onClick={() => { navigate('/orders'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <Receipt size={18} /> {t('nav.orders')}
                     </button>
@@ -572,6 +638,7 @@ const Home = () => {
               onSelect={handleSlotChange}
               hideClosed={hideClosedForSlot}
               onToggleHideClosed={setHideClosedForSlot}
+              closedVendorNames={closedVendorNamesInSlot}
             />
           </div>
 
@@ -641,11 +708,14 @@ const Home = () => {
             <div className="space-y-5">
               {groupedItems.map(group => {
                 // Đang tìm kiếm / lọc 1 quầy thì mở sẵn để không giấu kết quả
-                const isExpanded = Boolean(searchTerm.trim()) || Boolean(selectedVendorId) || expandedVendorIds.has(group.id);
+                const isExpanded = isVendorExpanded(group.id);
                 const firstItem = group.items[0];
                 const vendorHours = firstItem?.vendor?.openTime && firstItem?.vendor?.closeTime
                   ? `${firstItem.vendor.openTime} – ${firstItem.vendor.closeTime}`
                   : '';
+                const vendorBadge = getVendorBadge(firstItem);
+                const soldOutCount = group.items.filter((i) => i.isAvailable === false || i.countInStock === 0).length;
+                const allSoldOut = soldOutCount > 0 && soldOutCount === group.items.length;
                 const previewItems = group.items.filter((i) => i.imageUrl).slice(0, 4);
                 return (
                 <div
@@ -688,6 +758,19 @@ const Home = () => {
                           {vendorHours && (
                             <span className="flex items-center gap-1 text-xs font-bold text-gray-500">
                               <Clock size={12} /> {vendorHours}
+                            </span>
+                          )}
+
+                          {soldOutCount > 0 && (
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${allSoldOut ? 'bg-gray-800 text-white border-gray-800' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                              {allSoldOut ? 'Đã hết món' : `Tạm hết ${soldOutCount} món`}
+                            </span>
+                          )}
+
+                          {vendorBadge && (
+                            <span title={vendorBadge.title || ''} className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${vendorBadge.cls}`}>
+                              <span className={`w-2 h-2 rounded-full ${vendorBadge.dot}`} />
+                              {vendorBadge.label}
                             </span>
                           )}
                         </div>
@@ -774,6 +857,7 @@ const Home = () => {
             onSelect={handleSlotChange}
             hideClosed={hideClosedForSlot}
             onToggleHideClosed={setHideClosedForSlot}
+            closedVendorNames={closedVendorNamesInSlot}
           />
 
           {selectedSlot && closedHiddenCount > 0 && (

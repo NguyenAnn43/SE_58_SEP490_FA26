@@ -44,9 +44,10 @@ const InitialRoute = () => {
      );
   }
 
-  // Chưa đăng nhập -> Đá ra Login
+  // Chưa đăng nhập → vẫn xem được thực đơn (chế độ khách).
+  // Bấm "Thêm" / "Đặt món" sẽ báo "Vui lòng đăng nhập để đặt món!" rồi chuyển sang trang Đăng nhập.
   if (!token || !user) {
-    return <Navigate to="/login" replace />;
+    return <Home />;
   }
 
   // Đã đăng nhập -> Phân luồng về đúng "nhà" của từng người

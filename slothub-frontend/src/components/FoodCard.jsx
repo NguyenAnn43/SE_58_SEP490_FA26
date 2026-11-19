@@ -99,7 +99,7 @@ const FoodCard = ({ item, onAdd, onViewDetail }) => {
         <div className="flex justify-between items-end border-t border-gray-50 pt-3 mt-auto">
           <div className="flex flex-col">
             <PriceTag item={item} size="lg" />
-            {item.calories && (
+            {item.calories > 0 && (
               <span className="inline-flex items-center text-[10px] font-extrabold uppercase tracking-wider text-gray-500 mt-1">
                 <Flame size={12} className="mr-1 text-orange-500" strokeWidth={3} /> {item.calories} kcal
               </span>
