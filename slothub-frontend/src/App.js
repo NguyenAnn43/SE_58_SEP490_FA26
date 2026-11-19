@@ -92,7 +92,7 @@ function App() {
   }
 
   return (
-    <GoogleOAuthProvider clientId="583792662650-dvoaqprusu2f1ueef2rdl8bsb46i5j76.apps.googleusercontent.com">
+    <GoogleOAuthProvider clientId={process.env.REACT_APP_GOOGLE_CLIENT_ID || "583792662650-dvoaqprusu2f1ueef2rdl8bsb46i5j76.apps.googleusercontent.com"}>
       <AuthProvider>
         <LocaleProvider>
         {/* Hộp thông báo dùng chung cho appAlert()/appConfirm() — thiếu provider này thì mọi thông báo bị nuốt mất */}
