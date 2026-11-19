@@ -6,7 +6,6 @@ const { notifyVendorNewOrder } = require('../utils/vendorNotify');
 
 const { issuePickupCode } = require('../utils/pickupCode');
 
-const { sendPickupEmail } = require('../utils/pickupEmail');
 
 const { logOrderStatus } = require('../utils/persistence');
 
@@ -127,21 +126,7 @@ const finalizePaidOrders = async (req, orders, transactionId) => {
 
 
 
-    if (paidOrders.length && orders[0]?.user?.email) {
-
-        const populated = await Order.find({ _id: { $in: paidOrders.map((o) => o._id) } })
-
-            .populate('vendor', 'name')
-
-            .populate('items.menuItem', 'name price imageUrl');
-
-        sendPickupEmail({ user: orders[0].user, orders: populated, vendorNames }).catch((err) =>
-
-            console.log('❌ Lỗi gửi email mã nhận món:', err.message)
-
-        );
-
-    }
+    // Email mã nhận món được gửi khi chủ quầy XÁC NHẬN đơn (orderApprovalController.approveOrder)
 
 
 

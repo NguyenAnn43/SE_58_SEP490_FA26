@@ -9,6 +9,8 @@ const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const { PLATFORM_FEE_RATE } = require('./settleOrderPayment');
 const { logStudentWallet, logOrderStatus, notifyStudent } = require('./persistence');
+const { emailPlan, fmtDate } = require('./mealPlanEmail');
+const { notifyVendorMealPlan } = require('./vendorNotify');
 const { issuePickupCode } = require('./pickupCode');
 const { isVendorOpenForTimeRange } = require('./vendorHours');
 const R = require('./mealPlanRules');
@@ -277,6 +279,13 @@ const applyClose = async (sub, { mode, now = new Date(), req = null }) => {
                 : `${sub.planName} đã kết thúc.`,
             type: 'MEAL_PLAN',
         });
+        emailPlan(mode === 'cancel' ? 'cancel' : 'expire', sub, { refund: calc.refund });
+        if (mode === 'cancel') {
+            notifyVendorMealPlan(req, sub, {
+                title: 'Huỷ gói ăn',
+                message: `Sinh viên huỷ ${sub.planName}: ${calc.perMeal.length} bữa chưa dùng sẽ không phục vụ nữa — không cần chuẩn bị các suất này.${calc.retained > 0 ? ` Quầy nhận phần giữ lại ${Number(calc.retained).toLocaleString('vi-VN')}đ.` : ''}`,
+            });
+        }
     }
     return calc;
 };
@@ -369,7 +378,7 @@ const generateDueMeals = async ({ now = new Date(), req = null } = {}) => {
                     meal.order = order._id;
                     if (created) {
                         toCredit.push({ amount: R.mealPaid(sub, meal), orderId: order._id });
-                        notices.push({ title: 'Bữa gói hôm nay đã sẵn sàng', message: `${sub.menuItemName} tại ${sub.vendorName}, nhận lúc ${sub.slotStart} – ${sub.slotEnd}. Mã nhận món có trong mục Đơn hàng.`, orderId: order._id });
+                        notices.push({ title: 'Bữa gói hôm nay đang được chuẩn bị', message: `${sub.menuItemName} tại ${sub.vendorName}, nhận lúc ${sub.slotStart} – ${sub.slotEnd}. Mã nhận món sẽ gửi qua email khi quầy làm xong (cũng xem được trong mục Đơn hàng).`, orderId: order._id });
                     }
                     result.ordered += 1;
                     continue;
@@ -401,6 +410,14 @@ const generateDueMeals = async ({ now = new Date(), req = null } = {}) => {
                 await creditVendorRevenue(vendor, c.amount, `Bữa ${sub.planName} — đơn ${shortId(c.orderId)}`, c.orderId);
             }
             for (const n of notices) await notifyStudent(req, { userId: sub.user, type: 'MEAL_PLAN', ...n });
+            // Email mã QR + OTP KHÔNG gửi lúc tạo đơn — gửi khi quầy bấm "Hoàn thành & gửi mã" (vendorMarkReady)
+            for (const c of toCredit) {
+                notifyVendorMealPlan(req, sub, {
+                    title: 'Bữa gói hôm nay',
+                    message: `Đơn #${String(c.orderId).slice(-6)} tự tạo từ ${sub.planName}: 1 × ${sub.menuItemName} · nhận ${sub.slotStart} – ${sub.slotEnd} hôm nay (${fmtDate(R.vnDateKey(now))}). Đã trả trước — làm xong thì bấm "Hoàn thành & gửi mã" ở tab Gói ăn để gửi mã cho sinh viên.`,
+                    orderId: c.orderId,
+                });
+            }
         } catch (err) {
             console.error('[mealPlan] tạo đơn lỗi', String(sub._id), err.message);
         }
@@ -450,6 +467,7 @@ const sendReminders = async ({ now = new Date(), req = null } = {}) => {
                 title: `Gói ăn còn ${unscheduled} bữa chưa chọn ngày`,
                 message: `${sub.planName}: hạn chọn ngày cuối cùng là ${sub.finalDate}. Sau hạn, mỗi bữa chưa dùng chỉ được hoàn 50% giá gói.`,
             });
+            emailPlan('reminder', sub);
             sent += 1;
         } catch (err) {
             console.error('[mealPlan] nhắc nhở lỗi', String(sub._id), err.message);

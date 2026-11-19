@@ -8,7 +8,6 @@ const { settleOrderPayment } = require('../utils/settleOrderPayment');
 const { getVendorStatus } = require('../utils/vendorHours');
 const { getEffectivePrice } = require('../utils/pricing');
 const { notifyVendorNewOrder } = require('../utils/vendorNotify');
-const { sendPickupEmail } = require('../utils/pickupEmail');
 const { issuePickupCode } = require('../utils/pickupCode');
 const {
     logOrderStatus,
@@ -222,9 +221,7 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                 .populate('vendor', 'name')
                 .populate('items.menuItem', 'name price imageUrl');
 
-            sendPickupEmail({ user, orders: populatedOrders, vendorNames }).catch((err) =>
-                console.log('❌ Lỗi gửi email mã nhận món:', err.message)
-            );
+            // Email mã nhận món được gửi khi chủ quầy XÁC NHẬN đơn (orderApprovalController.approveOrder)
 
             return res.status(201).json({
                 message: createdOrders.length > 1

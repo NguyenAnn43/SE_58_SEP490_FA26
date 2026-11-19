@@ -315,7 +315,7 @@ const vi = {
     processing: 'Đang xử lý kết quả giao dịch...',
     invalid: 'Không tìm thấy thông tin giao dịch hợp lệ.',
     successTitle: 'Thành công!',
-    successDesc: 'Thanh toán thành công! Mã QR và OTP đã gửi về email — bạn cũng xem được trong mục Đơn hàng.',
+    successDesc: 'Thanh toán thành công! Đơn đang chờ quầy xác nhận — mã QR và OTP sẽ được gửi về email khi quầy nhận đơn, bạn cũng xem được trong mục Đơn hàng.',
     viewPickup: 'XEM MÃ NHẬN MÓN',
     failTitle: 'Thất bại',
     failHint: 'Vui lòng kiểm tra số dư hoặc thử thanh toán lại.',

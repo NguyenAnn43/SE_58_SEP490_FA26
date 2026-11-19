@@ -3,8 +3,20 @@ const MealPlan = require('../models/MealPlan');
 const MealPlanSubscription = require('../models/MealPlanSubscription');
 const MenuItem = require('../models/MenuItem');
 const Vendor = require('../models/Vendor');
+const Order = require('../models/Order');
 const svc = require('../utils/mealPlanService');
 const R = require('../utils/mealPlanRules');
+const { emailPlan, emailMealPickup, fmtDate } = require('../utils/mealPlanEmail');
+const { logOrderStatus, notifyStudent } = require('../utils/persistence');
+const { notifyVendorMealPlan } = require('../utils/vendorNotify');
+
+const studentName = (req) => req.user?.name || req.user?.email || 'Sinh viên';
+/** Lịch ăn ngắn gọn cho thông báo quầy: "T6 20/11, T7 21/11 (+3 chưa chọn ngày)" */
+const shortSchedule = (sub) => {
+    const dated = sub.meals.filter((m) => m.status === 'SCHEDULED' && m.date).map((m) => m.date).sort();
+    const un = sub.meals.filter((m) => m.status === 'UNSCHEDULED').length;
+    return `${dated.length ? dated.map(fmtDate).join(', ') : 'chưa có ngày'}${un ? ` (+${un} bữa chưa chọn ngày)` : ''}`;
+};
 
 const isVendorRole = (role) => ['vendor', 'vendor_owner'].includes(role);
 
@@ -76,6 +88,14 @@ const subscribe = handle(async (req, res) => {
     const result = await svc.subscribe({
         userId: req.user._id, planId: req.params.id, pickupSlotId, startDate, dates, agreeTerms, idempotencyKey,
     });
+    if (!result.duplicate) {
+        const s = result.subscription;
+        emailPlan('subscribe', s, {}, req.user);
+        notifyVendorMealPlan(req, s, {
+            title: 'Gói ăn mới',
+            message: `${studentName(req)} mua ${s.planName} (${s.mealsCount} bữa, nhận ${s.slotStart} – ${s.slotEnd}). Lịch: ${shortSchedule(s)}`,
+        });
+    }
     res.status(result.duplicate ? 200 : 201).json({
         message: result.duplicate ? 'Gói này đã được mua trước đó (không trừ tiền lần 2).' : 'Mua gói thành công!',
         duplicate: result.duplicate,
@@ -98,6 +118,11 @@ const postponeMeal = handle(async (req, res) => {
     const r = await svc.postponeMeal({
         userId: req.user._id, subId: req.params.id, mealId: req.params.mealId, newDate: req.body?.newDate || null,
     });
+    emailPlan('postpone', r.subscription, { fromDate: r.fromDate, toDate: r.toDate, penalty: r.penalty }, req.user);
+    notifyVendorMealPlan(req, r.subscription, {
+        title: 'Dời bữa gói',
+        message: `${studentName(req)} dời bữa ${r.subscription.menuItemName} ngày ${fmtDate(r.fromDate)}${r.toDate ? ` sang ${fmtDate(r.toDate)}` : ' (chưa chọn ngày mới)'} · nhận ${r.subscription.slotStart} – ${r.subscription.slotEnd}. Không cần chuẩn bị suất ngày ${fmtDate(r.fromDate)}.`,
+    });
     const msg = r.toDate ? `Đã dời bữa ${r.fromDate} sang ${r.toDate}.` : `Đã dời bữa ${r.fromDate} — chọn ngày mới sau.`;
     res.json({
         message: r.penalty > 0 ? `${msg} Đã trừ ${r.penalty.toLocaleString('vi-VN')}đ (bữa này tính giá lẻ).` : `${msg} Còn ${r.freePostponesLeft} lượt dời miễn phí.`,
@@ -110,6 +135,11 @@ const postponeMeal = handle(async (req, res) => {
 const scheduleMeal = handle(async (req, res) => {
     if (!requireStudent(req, res)) return;
     const r = await svc.scheduleMeal({ userId: req.user._id, subId: req.params.id, mealId: req.params.mealId, date: req.body?.date });
+    emailPlan('schedule', r.subscription, { date: req.body?.date }, req.user);
+    notifyVendorMealPlan(req, r.subscription, {
+        title: 'Xếp ngày bữa gói',
+        message: `${studentName(req)} xếp 1 bữa ${r.subscription.menuItemName} vào ${fmtDate(req.body?.date)} · nhận ${r.subscription.slotStart} – ${r.subscription.slotEnd} (${r.subscription.planName}).`,
+    });
     res.json({ message: `Đã xếp bữa vào ngày ${req.body?.date}.`, subscription: decorateSub(r.subscription) });
 });
 
@@ -212,21 +242,118 @@ const vendorSchedule = handle(async (req, res) => {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 31);
     const today = R.vnDateKey(new Date());
     const until = R.addDays(today, days - 1);
-    const rows = await MealPlanSubscription.aggregate([
-        { $match: { vendor: vendor._id, status: 'ACTIVE' } },
-        { $unwind: '$meals' },
-        { $match: { 'meals.status': { $in: ['SCHEDULED', 'ORDERED'] }, 'meals.date': { $gte: today, $lte: until } } },
-        { $group: { _id: { date: '$meals.date', item: '$menuItemName', slot: { $concat: ['$slotStart', ' - ', '$slotEnd'] } }, count: { $sum: 1 } } },
-        { $sort: { '_id.date': 1, '_id.slot': 1 } },
-    ]);
+    // Gồm cả gói COMPLETED (gói đã tạo đơn hết các bữa nhưng đơn hôm nay có thể chưa làm xong)
+    const subs = await MealPlanSubscription.find({
+        vendor: vendor._id,
+        status: { $in: ['ACTIVE', 'COMPLETED'] },
+        meals: { $elemMatch: { status: { $in: ['SCHEDULED', 'ORDERED'] }, date: { $gte: today, $lte: until } } },
+    }).select('menuItemName slotStart slotEnd meals status').lean();
+
+    const orderIds = [];
+    for (const sub of subs) for (const m of sub.meals) if (m.status === 'ORDERED' && m.order && m.date >= today && m.date <= until) orderIds.push(m.order);
+    const orders = orderIds.length ? await Order.find({ _id: { $in: orderIds } }).select('status').lean() : [];
+    const orderStatus = new Map(orders.map((o) => [String(o._id), o.status]));
+
+    // Mỗi dòng = ngày + món + khung giờ; đếm theo tiến độ: chưa tạo đơn / đang làm / đã xong / đã nhận
+    const byKey = new Map();
+    for (const sub of subs) {
+        for (const m of sub.meals) {
+            if (!['SCHEDULED', 'ORDERED'].includes(m.status) || !m.date || m.date < today || m.date > until) continue;
+            const slot = `${sub.slotStart} - ${sub.slotEnd}`;
+            const key = `${m.date}|${sub.menuItemName}|${slot}`;
+            if (!byKey.has(key)) {
+                byKey.set(key, { date: m.date, menuItemName: sub.menuItemName, slot, count: 0, waiting: 0, processing: 0, ready: 0, completed: 0, processingOrderIds: [] });
+            }
+            const row = byKey.get(key);
+            row.count += 1;
+            const st = m.status === 'ORDERED' ? orderStatus.get(String(m.order)) : null;
+            if (!st) row.waiting += 1;                       // chưa tới ngày → hệ thống chưa tạo đơn
+            else if (st === 'Processing') { row.processing += 1; row.processingOrderIds.push(String(m.order)); }
+            else if (st === 'Ready') row.ready += 1;          // đã làm xong, chờ sinh viên tới lấy
+            else if (st === 'Completed') row.completed += 1;  // sinh viên đã nhận món
+            else row.count -= 1;                             // đơn bị huỷ → không cần chuẩn bị
+        }
+    }
+    const rows = [...byKey.values()].filter((r) => r.count > 0)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot));
     const activeSubs = await MealPlanSubscription.countDocuments({ vendor: vendor._id, status: 'ACTIVE' });
+    res.json({ from: today, to: until, activeSubscriptions: activeSubs, rows });
+});
+
+/**
+ * [POST] /api/meal-plans/vendor/ready  { orderIds: [] }  hoặc  { date, slot, menuItemName } (cả dòng suất hôm nay)
+ * Quầy bấm "Hoàn thành" suất gói: đơn Đang làm → Sẵn sàng, báo sinh viên + gửi email mã QR/OTP mời đến lấy.
+ * Chỉ đơn của gói ăn, thuộc quầy mình, đang ở trạng thái Processing (bấm 2 lần không gửi trùng).
+ */
+const vendorMarkReady = handle(async (req, res) => {
+    const vendor = await getVendorOrFail(req, res);
+    if (!vendor) return;
+    let ids = (Array.isArray(req.body?.orderIds) ? req.body.orderIds : []).filter((id) => mongoose.isValidObjectId(id)).slice(0, 200);
+
+    // Bấm theo DÒNG suất (ngày + món + khung giờ): chỉ cho ngày hôm nay; tạo đơn nếu hệ thống chưa kịp tạo
+    const { date, slot, menuItemName } = req.body || {};
+    if (!ids.length && date) {
+        const today = R.vnDateKey(new Date());
+        if (date !== today) {
+            return res.status(400).json({ message: `Chỉ hoàn thành được suất của hôm nay. Suất ngày ${fmtDate(date)} sẽ bấm được vào đúng ngày đó.` });
+        }
+        await svc.generateDueMeals({ req });
+        const subs = await MealPlanSubscription.find({
+            vendor: vendor._id, status: { $in: ['ACTIVE', 'COMPLETED'] },
+            meals: { $elemMatch: { status: 'ORDERED', date: today } },
+        }).select('menuItemName slotStart slotEnd meals').lean();
+        for (const s of subs) {
+            if (menuItemName && s.menuItemName !== menuItemName) continue;
+            if (slot && `${s.slotStart} - ${s.slotEnd}` !== slot) continue;
+            for (const m of s.meals) if (m.status === 'ORDERED' && m.date === today && m.order) ids.push(String(m.order));
+        }
+    }
+    if (!ids.length) return res.status(400).json({ message: 'Không có suất nào để hoàn thành (có thể quầy không phục vụ khung giờ này nên bữa đã được dời).' });
+
+    const orders = await Order.find({
+        _id: { $in: ids }, vendor: vendor._id, status: 'Processing', mealPlanSubscription: { $ne: null },
+    }).select('_id user mealPlanSubscription');
+    const done = [];
+    for (const o of orders) {
+        // Cập nhật có điều kiện → 2 request đồng thời chỉ 1 cái chuyển được
+        const upd = await Order.updateOne({ _id: o._id, status: 'Processing' }, { $set: { status: 'Ready' } });
+        if (!upd.modifiedCount) continue;
+        done.push(o);
+        await logOrderStatus({
+            orderId: o._id, fromStatus: 'Processing', toStatus: 'Ready',
+            changedBy: req.user._id, changedByRole: req.user.role, note: 'Quầy hoàn thành suất gói ăn',
+        });
+    }
+
+    // Gom theo gói → mỗi sinh viên 1 email chứa mã của các suất vừa xong
+    const bySub = new Map();
+    for (const o of done) {
+        const k = String(o.mealPlanSubscription);
+        if (!bySub.has(k)) bySub.set(k, []);
+        bySub.get(k).push(o._id);
+    }
+    for (const [subId, orderIds] of bySub) {
+        const sub = await MealPlanSubscription.findById(subId);
+        if (!sub) continue;
+        emailMealPickup(sub, orderIds, { ready: true });
+        await notifyStudent(req, {
+            userId: sub.user, type: 'MEAL_PLAN', orderId: orderIds[0],
+            title: 'Bữa gói đã xong — mời đến lấy',
+            message: `${sub.vendorName} đã làm xong ${sub.menuItemName} (${sub.planName}). Nhận lúc ${sub.slotStart} – ${sub.slotEnd}; mã QR + OTP đã gửi về email và có trong mục Đơn hàng.`,
+        });
+    }
+
+    const skipped = ids.length - done.length;
     res.json({
-        from: today, to: until, activeSubscriptions: activeSubs,
-        rows: rows.map((r) => ({ date: r._id.date, menuItemName: r._id.item, slot: r._id.slot, count: r.count })),
+        message: done.length
+            ? `Đã hoàn thành ${done.length} suất — đã gửi mã nhận món cho sinh viên.${skipped ? ` (${skipped} suất đã xử lý trước đó)` : ''}`
+            : 'Các suất này đã được hoàn thành trước đó.',
+        completed: done.length,
     });
 });
 
 module.exports = {
+    vendorMarkReady,
     listPlans, subscribe, mySubscriptions, postponeMeal, scheduleMeal, cancelPreview, cancelSubscription,
     vendorPlans, vendorCreatePlan, vendorUpdatePlan, vendorSchedule, decorateSub,
 };

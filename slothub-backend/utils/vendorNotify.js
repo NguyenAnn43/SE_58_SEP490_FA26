@@ -147,4 +147,34 @@ const notifyVendorPayoutConfirmed = async (req, transaction, vendorUser) => {
     }
 };
 
-module.exports = { notifyVendorNewOrder, notifyVendorNewReview, buildNewOrderSpeakText, notifyVendorPayoutConfirmed };
+/**
+ * Thông báo cho chủ quầy về GÓI ĂN (mua / xếp ngày / dời / huỷ / bữa hôm nay).
+ * sub: MealPlanSubscription — có sẵn vendor, vendorName. Không ném lỗi.
+ */
+const notifyVendorMealPlan = async (req, sub, { title, message, orderId = null }) => {
+    try {
+        const vendor = await Vendor.findById(sub.vendor).select('owner name');
+        if (!vendor?.owner) return null;
+        const noti = await Notification.create({
+            audience: 'vendor',
+            recipientId: vendor.owner,
+            orderId,
+            title: `${title} · ${vendor.name}`,
+            message,
+            type: 'MEAL_PLAN',
+            actionLink: 'mealplans',
+            isRead: false,
+        });
+        const io = req?.app?.get('socketio');
+        if (io) {
+            const payload = typeof noti.toObject === 'function' ? noti.toObject() : noti;
+            io.emit(`vendor_notification_${String(vendor.owner)}`, payload);
+        }
+        return noti;
+    } catch (err) {
+        console.error('[notifyVendorMealPlan]', err.message);
+        return null;
+    }
+};
+
+module.exports = { notifyVendorNewOrder, notifyVendorNewReview, buildNewOrderSpeakText, notifyVendorPayoutConfirmed, notifyVendorMealPlan };

@@ -315,7 +315,7 @@ const en = {
     processing: 'Processing payment result...',
     invalid: 'Invalid transaction information.',
     successTitle: 'Success!',
-    successDesc: 'Payment successful! QR codes and OTPs were sent to your email — you can also view them in Orders.',
+    successDesc: 'Payment successful! Your order is waiting for the stall to confirm — the QR code and OTP will be emailed once the stall accepts it, and you can also view them in Orders.',
     viewPickup: 'VIEW PICKUP CODE',
     failTitle: 'Failed',
     failHint: 'Please check your balance or try again.',

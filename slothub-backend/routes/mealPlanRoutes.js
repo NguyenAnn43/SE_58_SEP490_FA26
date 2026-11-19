@@ -10,6 +10,7 @@ router.get('/', c.listPlans);
 router.get('/vendor/mine', protect, c.vendorPlans);
 router.get('/vendor/schedule', protect, c.vendorSchedule);
 router.post('/vendor', protect, c.vendorCreatePlan);
+router.post('/vendor/ready', protect, c.vendorMarkReady);
 router.put('/vendor/:id', protect, c.vendorUpdatePlan);
 
 // ===== Sinh viên =====

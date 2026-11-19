@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Package, Loader2, Power, PowerOff, Users, CalendarDays, PlusCircle } from 'lucide-react';
+import { Package, Loader2, Power, PowerOff, Users, CalendarDays, PlusCircle, CheckCircle2, Send } from 'lucide-react';
 import api from '../../../api/axios';
 
 const vnd = (n) => `${Number(n || 0).toLocaleString('vi-VN')}đ`;
@@ -73,6 +73,22 @@ const VendorMealPlans = () => {
     }
   };
 
+  /** Hoàn thành các suất đang làm của 1 dòng → đơn "Sẵn sàng" + gửi mã QR/OTP cho sinh viên */
+  const markReady = async (key, row) => {
+    const todo = (row.processing || 0) + (row.waiting || 0);
+    if (!window.confirm(`Xác nhận đã làm xong ${todo} suất ${row.menuItemName} (${row.slot})?\nHệ thống sẽ gửi mã nhận món (QR + OTP) qua email cho sinh viên.`)) return;
+    setBusy(key);
+    try {
+      const res = await api.post('/meal-plans/vendor/ready', { date: row.date, slot: row.slot, menuItemName: row.menuItemName });
+      alert(res.data.message);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không hoàn thành được suất gói');
+    } finally {
+      setBusy('');
+    }
+  };
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#F27124]" size={36} /></div>;
 
   const byDate = (schedule?.rows || []).reduce((acc, r) => { (acc[r.date] = acc[r.date] || []).push(r); return acc; }, {});
@@ -97,12 +113,51 @@ const VendorMealPlans = () => {
             {Object.entries(byDate).map(([date, rows]) => (
               <div key={date} className="border border-[var(--portal-border)] rounded-xl p-3">
                 <p className="font-black text-sm mb-1">{fmtDate(date)}</p>
-                {rows.map((r) => (
-                  <p key={`${r.menuItemName}-${r.slot}`} className="text-sm portal-text-secondary flex justify-between gap-2">
-                    <span className="truncate">{r.menuItemName} · {r.slot}</span>
-                    <b className="text-[#F27124]">{r.count} suất</b>
-                  </p>
-                ))}
+                {rows.map((r) => {
+                  const done = (r.ready || 0) + (r.completed || 0);
+                  const pct = r.count ? Math.round((done / r.count) * 100) : 0;
+                  const key = `${r.date}-${r.menuItemName}-${r.slot}`;
+                  return (
+                    <div key={key} className="mt-2 first:mt-0 space-y-1.5">
+                      <p className="text-sm portal-text-secondary flex justify-between gap-2">
+                        <span className="truncate">{r.menuItemName} · {r.slot}</span>
+                        <b className="text-[#F27124] shrink-0">{r.count} suất</b>
+                      </p>
+                      {/* Tiến độ: đã hoàn thành (sẵn sàng + đã nhận) / tổng suất */}
+                      <div className="h-1.5 rounded-full bg-gray-500/20 overflow-hidden">
+                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 flex items-center gap-1"><CheckCircle2 size={11} /> Đã hoàn thành {done}/{r.count}</span>
+                        {r.processing > 0 && <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400">Đang làm {r.processing}</span>}
+                        {r.ready > 0 && <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500">Chờ lấy {r.ready}</span>}
+                        {r.completed > 0 && <span className="px-2 py-0.5 rounded-md bg-gray-500/15 portal-muted">Đã nhận {r.completed}</span>}
+                        {r.waiting > 0 && <span className="px-2 py-0.5 rounded-md bg-gray-500/10 portal-muted" title="Hệ thống tự tạo đơn vào ngày ăn">Chưa tới ngày {r.waiting}</span>}
+                      </div>
+                      {(() => {
+                        const isToday = r.date === schedule?.from;
+                        const todo = (r.processing || 0) + (r.waiting || 0);
+                        if (todo === 0) {
+                          return (
+                            <p className="w-full mt-1 text-xs font-black py-2 rounded-lg flex items-center justify-center gap-1.5 bg-emerald-500/10 text-emerald-500">
+                              <CheckCircle2 size={14} /> Đã hoàn thành & gửi mã
+                            </p>
+                          );
+                        }
+                        return (
+                          <button type="button" disabled={!isToday || busy === key} onClick={() => markReady(key, r)}
+                            title={isToday ? '' : `Nút sẽ bấm được vào ${fmtDate(r.date)}`}
+                            className={`w-full mt-1 text-xs font-black py-2 rounded-lg flex items-center justify-center gap-1.5 ${isToday
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50'
+                              : 'bg-gray-500/10 portal-muted cursor-not-allowed'}`}>
+                            {busy === key ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            {isToday ? `Đã hoàn thành ${todo} suất & gửi mã` : `Hoàn thành & gửi mã · mở vào ${fmtDate(r.date)}`}
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
