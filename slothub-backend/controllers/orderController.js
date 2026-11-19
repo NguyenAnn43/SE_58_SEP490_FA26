@@ -1,29 +1,93 @@
 const Order = require('../models/Order');
+const MenuItem = require('../models/MenuItem');
+const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
 const Vendor = require('../models/Vendor');
 const TimeSlot = require('../models/TimeSlot');
 const crypto = require('crypto');
-const { settleOrderPayment } = require('../utils/settleOrderPayment');
+const { settleOrderPayment, reverseOrderPayment } = require('../utils/settleOrderPayment');
 const { getVendorStatus } = require('../utils/vendorHours');
 const { getEffectivePrice } = require('../utils/pricing');
 const { notifyVendorNewOrder } = require('../utils/vendorNotify');
-const { issuePickupCode } = require('../utils/pickupCode');
+const { validateVoucherForOrder, markVoucherUsed, lookupUserVoucher, normalizeVendorId } = require('../utils/forumHelpers');
+const {
+    issuePickupCode,
+    isPickupCodeExpired,
+    pickupCodeExpiredMessage
+} = require('../utils/pickupCode');
 const {
     logOrderStatus,
+    logPickupVerification,
+    logAudit,
+    notifyStudent,
     logStudentWallet
 } = require('../utils/persistence');
+const {
+    evaluateCancellation,
+    getCancellationPolicy,
+    formatPolicyForDisplay,
+} = require('../utils/cancellationPolicy');
 const {
     resolvePickupSchedule,
     validatePickupSchedule,
 } = require('../utils/pickupSchedule');
+const mongoose = require('mongoose');
 
-const normalizeVendorId = (vendor) => {
-    if (!vendor) return null;
-    if (typeof vendor === 'object' && vendor._id) {
-        return String(vendor._id);
+const isVendorRole = (role) => ['vendor', 'vendor_owner'].includes(role);
+
+const parseOrderIdFromQr = (raw) => {
+    const text = String(raw || '').trim();
+    if (mongoose.Types.ObjectId.isValid(text) && String(new mongoose.Types.ObjectId(text)) === text) {
+        return text;
     }
-    return String(vendor);
+    const match = text.match(/[a-fA-F0-9]{24}/);
+    if (match && mongoose.Types.ObjectId.isValid(match[0])) {
+        return match[0];
+    }
+    return null;
+};
+
+/** Mã đơn ngắn như trên app sinh viên, VD "#3628E7" */
+const shortOrderCode = (id) => `#${String(id).slice(-6).toUpperCase()}`;
+
+const applyOrderCompletion = async (order, meta = {}) => {
+    if (order.status === 'Completed') {
+        return { alreadyCompleted: true };
+    }
+    const prevStatus = order.status;
+    for (const item of order.items) {
+        await MenuItem.findByIdAndUpdate(item.menuItem, {
+            $inc: { countInStock: -item.quantity, totalSold: item.quantity }
+        });
+    }
+    order.status = 'Completed';
+    await order.save();
+    await logOrderStatus({
+        orderId: order._id,
+        fromStatus: prevStatus,
+        toStatus: 'Completed',
+        changedBy: meta.changedBy,
+        changedByRole: meta.changedByRole || 'vendor',
+        note: meta.note || 'Nhận món tại quầy'
+    });
+    if (meta.req && order.user) {
+        const vendorName = meta.vendorName
+            || (await Vendor.findById(order.vendor).select('name'))?.name
+            || 'quầy';
+        const methodLabel = { QR: 'quét mã QR', OTP: 'mã OTP' }[meta.method] || 'quầy xác nhận';
+        const pickedAt = new Date().toLocaleTimeString('vi-VN', {
+            hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh'
+        });
+        await notifyStudent(meta.req, {
+            userId: order.user,
+            title: 'Đã nhận món',
+            message: `Bạn đã nhận đơn ${shortOrderCode(order._id)} tại ${vendorName} lúc ${pickedAt} (${methodLabel}). Chúc bạn ngon miệng! Đừng quên đánh giá món nhé ⭐`,
+            type: 'ORDER_COMPLETED',
+            orderId: order._id
+        });
+    }
+    return { alreadyCompleted: false };
 };
 
 const CART_POPULATE = {
@@ -97,7 +161,7 @@ const removeProcessedCartItems = async (cart, processedMenuItemIds) => {
 // 1. [POST] Sinh viên đặt đồ ăn (hỗ trợ chọn món + nhiều quầy)
 const createOrderCore = async (req, res, idempotencyKey) => {
     try {
-        const { paymentMethod, note, pickupSlot, pickupDate, selectedMenuItemIds } = req.body;
+        const { paymentMethod, note, pickupSlot, pickupDate, selectedMenuItemIds, voucherCode } = req.body;
         const userId = req.user.id;
 
         if (!pickupSlot) return res.status(400).json({ message: 'Vui lòng chọn khung giờ nhận hàng!' });
@@ -152,6 +216,44 @@ const createOrderCore = async (req, res, idempotencyKey) => {
         const createdOrders = [];
         const vendorNames = {};
 
+        let voucherApplied = null;
+        if (voucherCode?.trim()) {
+            const code = voucherCode.trim();
+            const voucher = await lookupUserVoucher({ code, userId });
+            if (!voucher) {
+                return res.status(400).json({
+                    message: 'Mã voucher không hợp lệ hoặc bạn không sở hữu mã này.',
+                });
+            }
+
+            const voucherVendorId = normalizeVendorId(voucher.vendor);
+            const targetGroup = groupEntries.find(
+                (g) => normalizeVendorId(g.vendorId) === voucherVendorId
+            );
+
+            if (!targetGroup) {
+                const vendorDoc = await Vendor.findById(voucher.vendor).select('name');
+                return res.status(400).json({
+                    message: `Voucher chỉ dùng cho quầy "${vendorDoc?.name || 'này'}". Vui lòng chọn món của quầy đó trong giỏ.`,
+                });
+            }
+
+            const vResult = await validateVoucherForOrder({
+                code,
+                userId,
+                vendorId: voucherVendorId,
+                orderTotal: targetGroup.totalAmount,
+            });
+            if (vResult.error) {
+                return res.status(400).json({ message: vResult.error });
+            }
+
+            targetGroup.voucherDiscount = vResult.discount;
+            targetGroup.totalAmount -= vResult.discount;
+            grandTotal -= vResult.discount;
+            voucherApplied = vResult.voucher;
+        }
+
         // --- XỬ LÝ THANH TOÁN VÍ NỘI BỘ ---
         if (paymentMethod === 'wallet') {
             const user = await User.findById(userId);
@@ -169,6 +271,9 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                     vendor: group.vendorId,
                     items: group.processedItems,
                     totalPrice: group.totalAmount,
+                    discountAmount: group.voucherDiscount || 0,
+                    voucherCode: group.voucherDiscount ? voucherApplied?.code : '',
+                    voucherId: group.voucherDiscount ? voucherApplied?._id : null,
                     note,
                     pickupSlot: pickupSlotLabel,
                     pickupSlotId: slot._id,
@@ -185,6 +290,10 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                 });
                 issuePickupCode(newOrder);
                 await newOrder.save();
+                if (group.voucherDiscount && voucherApplied) {
+                    await markVoucherUsed(voucherApplied._id, newOrder._id);
+                    voucherApplied = null;
+                }
                 vendorNames[String(group.vendorId)] = group.vendor?.name || 'Quầy căng tin';
 
                 await logOrderStatus({
@@ -241,6 +350,9 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                     vendor: group.vendorId,
                     items: group.processedItems,
                     totalPrice: group.totalAmount,
+                    discountAmount: group.voucherDiscount || 0,
+                    voucherCode: group.voucherDiscount ? voucherApplied?.code : '',
+                    voucherId: group.voucherDiscount ? voucherApplied?._id : null,
                     note,
                     pickupSlot: pickupSlotLabel,
                     pickupSlotId: slot._id,
@@ -283,12 +395,59 @@ const createOrderCore = async (req, res, idempotencyKey) => {
             });
         }
 
+        // --- XỬ LÝ VNPay (Giữ lại dự phòng) ---
+        if (paymentMethod === 'vnpay') {
+            for (const group of groupEntries) {
+                const newOrder = new Order({
+                    user: userId,
+                    vendor: group.vendorId,
+                    items: group.processedItems,
+                    totalPrice: group.totalAmount,
+                    note,
+                    pickupSlot: pickupSlotLabel,
+                    pickupSlotId: slot._id,
+                    pickupSlotStartAt,
+                    pickupSlotEndAt,
+                    pickupDay,
+                    status: 'Pending',
+                    paymentStatus: 'Unpaid',
+                    paymentMethod: 'vnpay',
+                    checkoutBatchId
+                });
+                await newOrder.save();
+                await logOrderStatus({
+                    orderId: newOrder._id,
+                    fromStatus: '',
+                    toStatus: 'Pending',
+                    changedBy: userId,
+                    changedByRole: 'student',
+                    note: 'Khởi tạo đơn VNPay'
+                });
+                createdOrders.push(newOrder);
+            }
+
+            await removeProcessedCartItems(cart, processedMenuItemIds);
+
+            const populatedOrders = await Order.find({ _id: { $in: createdOrders.map((o) => o._id) } })
+                .populate('vendor', 'name')
+                .populate('items.menuItem', 'name price imageUrl');
+
+            return res.status(201).json({
+                message: 'Khởi tạo đơn VNPay',
+                orders: populatedOrders,
+                order: populatedOrders[0],
+                checkoutBatchId,
+                isVNPay: true
+            });
+        }
+
         return res.status(400).json({ message: 'Phương thức thanh toán không hợp lệ!' });
 
     } catch (error) {
         res.status(500).json({ message: 'Lỗi tạo đơn', error: error.message });
     }
 };
+
 
 // Khoá chống tạo đơn trùng: request đang xử lý (trong tiến trình) + tra DB theo idempotencyKey
 const inFlightOrderKeys = new Set();
@@ -329,6 +488,236 @@ const createOrder = async (req, res) => {
     }
 };
 
+// 2. [PUT] Cập nhật trạng thái (Dùng cho Vendor)
+const updateOrderStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+
+        if (isVendorRole(req.user.role)) {
+            const vendor = await Vendor.findOne({ owner: req.user.id });
+            if (!vendor || order.vendor.toString() !== vendor._id.toString()) {
+                return res.status(403).json({ message: 'Bạn không có quyền sửa đơn của quầy khác!' });
+            }
+            // Chủ quầy chỉ đi theo luồng: (Duyệt) → Đang làm → Sẵn sàng → Hoàn thành.
+            // Duyệt/Từ chối dùng API riêng (bắt buộc lý do khi từ chối); không huỷ tuỳ ý đơn đã nhận.
+            const VENDOR_TRANSITIONS = {
+                Processing: ['Ready', 'Completed'],
+                Ready: ['Completed'],
+            };
+            if (order.status === 'Pending') {
+                return res.status(400).json({ message: 'Đơn đang chờ duyệt — dùng nút Duyệt hoặc Từ chối.' });
+            }
+            if (!(VENDOR_TRANSITIONS[order.status] || []).includes(status)) {
+                return res.status(400).json({
+                    message: `Không thể chuyển đơn từ "${order.status}" sang "${status}".`,
+                });
+            }
+        }
+
+        // Logic hủy đơn -> Hoàn tiền (vendor/admin: hoàn 100%)
+        if (status === 'Cancelled' && order.status !== 'Cancelled') {
+            if (req.user.role === 'student') {
+                return res.status(400).json({
+                    message: 'Vui lòng dùng nút "Hủy đơn" để áp dụng chính sách hoàn tiền theo thời gian.',
+                    useCancelEndpoint: true,
+                });
+            }
+            const prev = order.status;
+            if (order.paymentStatus === 'Paid') {
+                await reverseOrderPayment(order, {
+                    description: `Hoàn 100% đơn #${String(order._id).slice(-6)} (hủy bởi quầy/hệ thống)`,
+                });
+                order.paymentStatus = 'Refunded';
+                order.refundPercent = 100;
+                order.refundAmount = order.totalPrice;
+            }
+            order.status = status;
+            order.cancelledBy = isVendorRole(req.user.role) ? 'vendor' : (req.user.role === 'admin' ? 'admin' : 'system');
+            order.cancelledAt = new Date();
+            await order.save();
+            await logOrderStatus({
+                orderId: order._id,
+                fromStatus: prev,
+                toStatus: 'Cancelled',
+                changedBy: req.user.id,
+                changedByRole: req.user.role,
+                note: 'Hủy đơn'
+            });
+            return res.status(200).json({ message: 'Cập nhật thành công', order });
+        }
+
+        if (status === 'Completed') {
+            if (order.paymentStatus === 'Paid' && isPickupCodeExpired(order)) {
+                return res.status(400).json({ message: pickupCodeExpiredMessage() });
+            }
+            await applyOrderCompletion(order, {
+                req,
+                changedBy: req.user.id,
+                changedByRole: req.user.role,
+                note: 'Hoàn thành thủ công'
+            });
+            const populated = await Order.findById(order._id)
+                .populate('user', 'name')
+                .populate('items.menuItem', 'name price imageUrl');
+            return res.status(200).json({ message: 'Cập nhật thành công', order: populated });
+        }
+
+        const prev = order.status;
+        order.status = status;
+        await order.save();
+        await logOrderStatus({
+            orderId: order._id,
+            fromStatus: prev,
+            toStatus: status,
+            changedBy: req.user.id,
+            changedByRole: req.user.role
+        });
+        if (status === 'Ready' && order.user) {
+            const readyVendor = await Vendor.findById(order.vendor).select('name');
+            await notifyStudent(req, {
+                userId: order.user,
+                title: 'Đơn sẵn sàng',
+                message: `Đơn ${shortOrderCode(order._id)} tại ${readyVendor?.name || 'quầy'} đã chuẩn bị xong — mở "Mã nhận món" và đến quầy nhận nhé!`,
+                type: 'ORDER_READY',
+                orderId: order._id
+            });
+        }
+        res.status(200).json({ message: 'Cập nhật thành công', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi cập nhật', error: error.message });
+    }
+};
+
+// 2b. [POST] Vendor quét QR xác nhận sinh viên nhận món
+const verifyVendorPickup = async (req, res) => {
+    try {
+        if (!isVendorRole(req.user.role)) {
+            return res.status(403).json({ message: 'Chỉ chủ quầy mới quét mã nhận đơn!' });
+        }
+
+        const vendor = await Vendor.findOne({ owner: req.user.id });
+        if (!vendor) {
+            return res.status(404).json({ message: 'Bạn chưa có gian hàng!' });
+        }
+
+        const { qrData, orderId, otpCode } = req.body;
+        let parsedId = parseOrderIdFromQr(orderId || qrData);
+
+        let order;
+        if (parsedId) {
+            order = await Order.findById(parsedId);
+        } else if (otpCode && String(otpCode).trim()) {
+            order = await Order.findOne({
+                vendor: vendor._id,
+                otpCode: String(otpCode).trim(),
+                paymentStatus: 'Paid',
+                status: { $nin: ['Cancelled', 'Rejected'] }
+            }).sort({ createdAt: -1 });
+        }
+
+        if (!parsedId && !order) {
+            return res.status(400).json({
+                message: 'Mã không hợp lệ. Quét QR trên app sinh viên hoặc nhập mã OTP 4 số.'
+            });
+        }
+
+        if (!order) {
+            return res.status(404).json({ message: 'Không tìm thấy đơn hàng!' });
+        }
+
+        if (order.vendor.toString() !== vendor._id.toString()) {
+            return res.status(403).json({ message: 'Đơn hàng không thuộc quầy của bạn!' });
+        }
+
+        if (order.paymentStatus !== 'Paid') {
+            return res.status(400).json({ message: 'Đơn chưa thanh toán, không thể giao món.' });
+        }
+
+        if (order.status === 'Cancelled') {
+            return res.status(400).json({ message: 'Đơn đã bị hủy.' });
+        }
+
+        if (order.status === 'Completed') {
+            const populatedDone = await Order.findById(order._id)
+                .populate('user', 'name phone')
+                .populate('items.menuItem', 'name price imageUrl');
+            return res.status(200).json({
+                success: true,
+                alreadyCompleted: true,
+                message: 'Đơn đã được xác nhận nhận món trước đó.',
+                order: populatedDone
+            });
+        }
+
+        if (order.status === 'Pending') {
+            return res.status(400).json({ message: 'Đơn chưa được quầy duyệt — vui lòng duyệt đơn trước khi giao món.' });
+        }
+        if (order.status === 'Rejected') {
+            return res.status(400).json({ message: 'Đơn đã bị từ chối, không thể giao món.' });
+        }
+        const pickupAllowed = ['Processing', 'Ready'];
+        if (!pickupAllowed.includes(order.status)) {
+            return res.status(400).json({ message: `Trạng thái đơn không hợp lệ: ${order.status}` });
+        }
+
+        if (otpCode && order.otpCode && String(otpCode).trim() !== order.otpCode) {
+            return res.status(400).json({ message: 'Mã OTP không khớp với đơn hàng.' });
+        }
+
+        if (isPickupCodeExpired(order)) {
+            return res.status(400).json({ message: pickupCodeExpiredMessage(), expired: true });
+        }
+
+        const method = parsedId ? 'QR' : (otpCode ? 'OTP' : 'MANUAL_STATUS');
+        const { alreadyCompleted } = await applyOrderCompletion(order, {
+            req,
+            changedBy: req.user.id,
+            changedByRole: req.user.role,
+            note: `Xác nhận nhận món (${method})`,
+            vendorName: vendor.name,
+            method
+        });
+
+        await logPickupVerification({
+            order: order._id,
+            vendor: vendor._id,
+            student: order.user,
+            verifiedBy: req.user.id,
+            method,
+            success: true,
+            alreadyCompleted,
+            otpMatched: otpCode ? String(otpCode).trim() === order.otpCode : undefined,
+            note: alreadyCompleted ? 'Đơn đã hoàn thành trước đó' : 'Xác nhận thành công'
+        });
+        await logAudit({
+            actor: req.user.id,
+            actorRole: req.user.role,
+            action: 'ORDER_PICKUP_VERIFIED',
+            entityType: 'Order',
+            entityId: order._id,
+            metadata: { method, alreadyCompleted }
+        });
+
+        const populated = await Order.findById(order._id)
+            .populate('user', 'name phone')
+            .populate('items.menuItem', 'name price imageUrl');
+
+        res.status(200).json({
+            success: true,
+            alreadyCompleted,
+            message: alreadyCompleted
+                ? 'Đơn đã được xác nhận nhận món trước đó.'
+                : 'Xác nhận nhận món thành công!',
+            order: populated
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi xác nhận nhận món', error: error.message });
+    }
+};
+
+
 const getMyOrders = async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user.id })
@@ -341,7 +730,182 @@ const getMyOrders = async (req, res) => {
     }
 };
 
+const getCancellationPolicyPublic = async (req, res) => {
+    try {
+        const policy = await getCancellationPolicy();
+        return res.json(formatPolicyForDisplay(policy));
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi tải chính sách hủy đơn' });
+    }
+};
+
+const previewCancelOrder = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+        if (String(order.user) !== String(req.user.id)) {
+            return res.status(403).json({ message: 'Không có quyền' });
+        }
+        if (order.status === 'Cancelled') {
+            return res.status(400).json({ message: 'Đơn đã được hủy' });
+        }
+        if (order.status === 'Completed') {
+            return res.status(400).json({ message: 'Đơn đã hoàn thành, không thể hủy' });
+        }
+        if (!['Pending', 'Processing', 'Ready'].includes(order.status)) {
+            return res.status(400).json({ message: 'Đơn không thể hủy ở trạng thái hiện tại' });
+        }
+
+        if (order.paymentStatus !== 'Paid') {
+            return res.json({
+                unpaid: true,
+                refundPercent: 100,
+                refundAmount: 0,
+                forfeitAmount: 0,
+                message: 'Đơn chưa thanh toán — hủy miễn phí, không bị trừ tiền.',
+                canCancel: true,
+            });
+        }
+
+        const evaluation = await evaluateCancellation(order);
+        return res.json({
+            unpaid: false,
+            pickupSlot: order.pickupSlot,
+            pickupStartAt: evaluation.pickupStartAt,
+            minutesUntilPickup: evaluation.minutesUntilPickup,
+            refundPercent: evaluation.refundPercent,
+            refundAmount: evaluation.refundAmount,
+            forfeitAmount: evaluation.forfeitAmount,
+            totalPrice: order.totalPrice,
+            message: evaluation.message,
+            canCancel: evaluation.canCancel,
+            policy: formatPolicyForDisplay(evaluation.policy),
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi xem trước hủy đơn', error: error.message });
+    }
+};
+
+const cancelMyOrder = async (req, res) => {
+    try {
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ message: 'Chỉ sinh viên mới hủy đơn qua chức năng này' });
+        }
+
+        const order = await Order.findById(req.params.id).populate('vendor', 'name');
+        if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+        if (String(order.user) !== String(req.user.id)) {
+            return res.status(403).json({ message: 'Không có quyền hủy đơn này' });
+        }
+        if (order.status === 'Cancelled') {
+            return res.status(400).json({ message: 'Đơn đã được hủy' });
+        }
+        if (order.status === 'Completed') {
+            return res.status(400).json({ message: 'Đơn đã hoàn thành, không thể hủy' });
+        }
+        if (!['Pending', 'Processing', 'Ready'].includes(order.status)) {
+            return res.status(400).json({ message: 'Đơn không thể hủy ở trạng thái hiện tại' });
+        }
+
+        const { reason } = req.body || {};
+        const prev = order.status;
+        let refundPercent = 0;
+        let refundAmount = 0;
+        let message = 'Đã hủy đơn thành công.';
+
+        let evaluation = null;
+        if (order.paymentStatus === 'Paid') {
+            evaluation = await evaluateCancellation(order);
+            if (!evaluation.canCancel) {
+                return res.status(400).json({ message: evaluation.message });
+            }
+            refundPercent = evaluation.refundPercent;
+            refundAmount = evaluation.refundAmount;
+            message = evaluation.message;
+        } else {
+            message = 'Đã hủy đơn chưa thanh toán.';
+        }
+
+        // Chiếm đơn nguyên tử: chỉ huỷ được nếu trạng thái chưa bị quầy đổi (duyệt/từ chối) cùng lúc
+        const claimed = await Order.findOneAndUpdate(
+            { _id: order._id, user: req.user.id, status: prev },
+            {
+                $set: {
+                    status: 'Cancelled',
+                    cancelledBy: 'student',
+                    cancelledAt: new Date(),
+                    cancelReason: reason?.trim() || '',
+                    refundPercent,
+                    refundAmount,
+                    refundStatus: refundAmount > 0 ? 'PROCESSING' : 'NOT_REQUIRED',
+                },
+            },
+            { new: true }
+        );
+        if (!claimed) {
+            return res.status(409).json({ message: 'Trạng thái đơn vừa thay đổi (quầy đã xử lý). Vui lòng tải lại.' });
+        }
+        order.status = 'Cancelled';
+
+        if (evaluation && refundAmount > 0) {
+            await reverseOrderPayment(order, {
+                refundAmount,
+                description: `Hoàn ${refundPercent}% (${refundAmount.toLocaleString('vi-VN')}đ) đơn #${String(order._id).slice(-6)}`,
+            });
+            await Order.updateOne({ _id: order._id }, {
+                $set: {
+                    paymentStatus: refundPercent >= 100 ? 'Refunded' : 'PartialRefunded',
+                    refundStatus: 'SUCCESS',
+                    refundMethod: 'WALLET',
+                    refundedAt: new Date(),
+                },
+            });
+        }
+
+        await logOrderStatus({
+            orderId: order._id,
+            fromStatus: prev,
+            toStatus: 'Cancelled',
+            changedBy: req.user.id,
+            changedByRole: 'student',
+            note: `Sinh viên hủy — hoàn ${refundPercent}%`,
+        });
+
+        const vendor = await Vendor.findById(order.vendor);
+        if (vendor?.owner) {
+            const io = req.app.get('socketio');
+            if (io) {
+                io.emit(`notification_${vendor.owner}`, {
+                    title: 'Khách hủy đơn',
+                    message: `Đơn #${String(order._id).slice(-6)} đã bị hủy${refundAmount ? ` — hoàn ${refundPercent}%` : ' — không hoàn tiền'}.`,
+                    type: 'ORDER_CANCELLED',
+                    orderId: order._id,
+                });
+            }
+        }
+
+        const populated = await Order.findById(order._id)
+            .populate('vendor', 'name')
+            .populate('items.menuItem', 'name price imageUrl');
+
+        return res.json({
+            message,
+            refundPercent,
+            refundAmount,
+            forfeitAmount: order.totalPrice - refundAmount,
+            order: populated,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi hủy đơn', error: error.message });
+    }
+};
+
 module.exports = {
     createOrder,
-    getMyOrders
+    getMyOrders,
+    updateOrderStatus,
+    verifyVendorPickup,
+    getCancellationPolicyPublic,
+    previewCancelOrder,
+    cancelMyOrder,
 };

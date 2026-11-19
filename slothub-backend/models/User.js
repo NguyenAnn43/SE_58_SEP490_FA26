@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs"); // 🌟 Đã thêm thư viện băm mật khẩu
 
 const userSchema = new mongoose.Schema(
@@ -40,6 +41,8 @@ const userSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     studentId: { type: String, trim: true, default: "" },
     tokenVersion: { type: Number, default: 0 },
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
   },
   {
     timestamps: true,
@@ -51,6 +54,13 @@ const userSchema = new mongoose.Schema(
 userSchema.virtual("isPremium").get(function () {
   return this.walletBalance > 1000000;
 });
+
+userSchema.methods.getResetPasswordToken = function () {
+  const resetToken = crypto.randomBytes(20).toString("hex");
+  this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+  this.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+  return resetToken;
+};
 
 // ==========================================
 // 1. BĂM MẬT KHẨU TRƯỚC KHI LƯU VÀO DB (BẢN FIX TRIỆT ĐỂ LỖI NEXT)

@@ -21,5 +21,21 @@ const getActiveTimeSlots = async (req, res) => {
     }
 };
 
+// 2. [POST] Tạo khung giờ mới (Chỉ Admin)
+const createTimeSlot = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Chỉ Admin mới có quyền tạo Slot!' });
+        }
 
-module.exports = { getActiveTimeSlots };
+        const { startTime, endTime, maxCapacity } = req.body;
+        const newSlot = new TimeSlot({ startTime, endTime, maxCapacity });
+
+        await newSlot.save();
+        res.status(201).json({ message: 'Tạo khung giờ thành công!', slot: newSlot });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi tạo khung giờ', error: error.message });
+    }
+};
+
+module.exports = { getActiveTimeSlots, createTimeSlot };

@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const { settleOrderPayment } = require('../utils/settleOrderPayment');
 
 const { notifyVendorNewOrder } = require('../utils/vendorNotify');
+const { markVoucherUsed } = require('../utils/forumHelpers');
 
 const { issuePickupCode } = require('../utils/pickupCode');
 
@@ -109,6 +110,9 @@ const finalizePaidOrders = async (req, orders, transactionId) => {
 
         });
 
+        if (order.voucherId) {
+            await markVoucherUsed(order.voucherId, order._id);
+        }
 
 
 
@@ -188,9 +192,9 @@ const createPaymentLink = async (req, res) => {
 
 
 
-        // Tự động nhận diện URL Frontend (1 là localhost:3000, 2 là ngkhanh04.github.io/SlotHub-Toivoa)
+        // URL Frontend: FE gửi kèm origin; nếu thiếu thì localhost:3000 (dev) hoặc FRONTEND_URL (biến môi trường khi deploy)
         const isLocal = req.headers.referer && (req.headers.referer.includes('localhost') || req.headers.referer.includes('127.0.0.1'));
-        const origin = req.body.origin || (isLocal ? 'http://localhost:3000' : 'https://ngkhanh04.github.io/SlotHub-Toivoa');
+        const origin = req.body.origin || (isLocal ? 'http://localhost:3000' : (process.env.FRONTEND_URL || 'https://ngkhanh04.github.io/SlotHub-Toivoa'));
 
         const cleanOrigin = origin.replace(/\/$/, '');
 

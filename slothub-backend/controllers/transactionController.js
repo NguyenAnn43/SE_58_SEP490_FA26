@@ -2,6 +2,8 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const { notifyAdmin } = require('../utils/adminNotify');
+const { notifyVendorPayoutConfirmed } = require('../utils/vendorNotify');
+const { logStudentWallet, logAudit, notifyStudent } = require('../utils/persistence');
 const { studentHasBankAccount } = require('../utils/studentBankAccount');
 
 const isVendorRole = (role) => ['vendor', 'vendor_owner'].includes(role);
@@ -116,6 +118,8 @@ const requestTransaction = async (req, res) => {
     }
 };
 
+// ... Các hàm khác giữ nguyên y hệt (getMyTransactions, getVendorTransactions, getAllTransactions, updateTransactionStatus) ...
+
 // 2. [GET] Lấy lịch sử dòng tiền Cá nhân
 const getMyTransactions = async (req, res) => {
     try {
@@ -123,6 +127,136 @@ const getMyTransactions = async (req, res) => {
         res.status(200).json(transactions);
     } catch (error) {
         res.status(500).json({ message: 'Lỗi lấy lịch sử giao dịch', error: error.message });
+    }
+};
+
+// 3. [GET] Lấy lịch sử dòng tiền của 1 Quán
+const getVendorTransactions = async (req, res) => {
+    try {
+        const transactions = await Transaction.find({ vendorId: req.params.vendorId })
+            .populate('orderId', 'totalPrice status') 
+            .populate('userId', 'name email')
+            .sort({ createdAt: -1 });
+        res.status(200).json(transactions);
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi lấy lịch sử giao dịch quán', error: error.message });
+    }
+};
+
+// 4. [GET] Kiểm toán toàn hệ thống (Admin)
+const getAllTransactions = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Quyền truy cập bị từ chối!' });
+        
+        const transactions = await Transaction.find()
+            .populate('userId', 'name email walletBalance role')
+            .sort({ createdAt: -1 });
+        res.status(200).json(transactions);
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi hệ thống kiểm toán', error: error.message });
+    }
+};
+
+// 5. [PUT] Admin Duyệt / Từ chối giao dịch
+const updateTransactionStatus = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Thao tác bị từ chối!' });
+
+        const { status, transferRef, adminNote } = req.body; 
+        const transactionId = req.params.id;
+
+        const transaction = await Transaction.findById(transactionId);
+        if (!transaction) return res.status(404).json({ message: 'Không tìm thấy giao dịch!' });
+        
+        if (transaction.status !== 'PENDING') return res.status(400).json({ message: 'Giao dịch này đã được xử lý!' });
+
+        const user = await User.findById(transaction.userId);
+        if (!user) return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
+
+        if (status === 'SUCCESS' && (transaction.type === 'PAYOUT' || transaction.type === 'WITHDRAW')) {
+            if (!transferRef?.trim() && !adminNote?.trim()) {
+                return res.status(400).json({
+                    message: 'Vui lòng nhập mã giao dịch hoặc ghi chú xác nhận đã chuyển khoản trước khi duyệt.',
+                });
+            }
+        }
+
+        if (status === 'SUCCESS') {
+            if (transaction.type === 'DEPOSIT') {
+                user.walletBalance += transaction.amount;
+                await user.save();
+                await logStudentWallet({
+                    userId: user._id,
+                    amount: transaction.amount,
+                    balanceAfter: user.walletBalance,
+                    type: 'DEPOSIT',
+                    transactionId: transaction._id,
+                    description: transaction.description || 'Nạp ví'
+                });
+            }
+        } 
+        else if (status === 'FAILED') {
+            if (transaction.type === 'WITHDRAW' || transaction.type === 'PAYOUT') {
+                user.walletBalance += transaction.amount;
+                await user.save();
+                if (transaction.type === 'WITHDRAW') {
+                    await logStudentWallet({
+                        userId: user._id,
+                        amount: transaction.amount,
+                        balanceAfter: user.walletBalance,
+                        type: 'REFUND',
+                        transactionId: transaction._id,
+                        description: 'Hoàn tiền yêu cầu rút bị từ chối'
+                    });
+                }
+            }
+        } 
+        else {
+            return res.status(400).json({ message: 'Trạng thái duyệt không hợp lệ!' });
+        }
+
+        transaction.status = status;
+        transaction.processedAt = new Date();
+        if (transferRef?.trim()) transaction.transferRef = transferRef.trim();
+        if (adminNote?.trim()) transaction.adminNote = adminNote.trim();
+        await transaction.save();
+
+        if (status === 'SUCCESS') {
+            if (transaction.type === 'PAYOUT') {
+                await notifyVendorPayoutConfirmed(req, transaction, user);
+            } else if (transaction.type === 'WITHDRAW') {
+                const amount = Number(transaction.amount || 0).toLocaleString('vi-VN');
+                const refLine = transaction.transferRef ? ` Mã GD: ${transaction.transferRef}.` : '';
+                await notifyStudent(req, {
+                    userId: user._id,
+                    title: 'Đã chuyển khoản rút tiền',
+                    message: `Admin xác nhận đã chuyển ${amount}đ vào TK của bạn.${refLine} Vui lòng kiểm tra sao kê.`,
+                    type: 'WITHDRAW_CONFIRMED',
+                });
+            }
+        }
+
+        await logAudit({
+            actor: req.user.id,
+            actorRole: 'admin',
+            action: status === 'SUCCESS' ? 'TRANSACTION_APPROVED' : 'TRANSACTION_REJECTED',
+            entityType: 'Transaction',
+            entityId: transaction._id,
+            metadata: { type: transaction.type, amount: transaction.amount }
+        });
+
+        res.status(200).json({
+            message: status === 'SUCCESS'
+                ? (transaction.type === 'PAYOUT'
+                    ? 'Đã duyệt và gửi thông báo xác nhận chuyển khoản cho chủ quầy!'
+                    : transaction.type === 'WITHDRAW'
+                        ? 'Đã duyệt và gửi thông báo xác nhận chuyển khoản cho sinh viên!'
+                        : 'Đã PHÊ DUYỆT lệnh tiền!')
+                : 'Đã TỪ CHỐI lệnh tiền!',
+            transaction,
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Lỗi khi phê duyệt giao dịch', error: error.message });
     }
 };
 
@@ -161,5 +295,8 @@ const getVendorWalletSummary = async (req, res) => {
 module.exports = {
     requestTransaction,
     getMyTransactions,
+    getVendorTransactions,
+    getAllTransactions,
+    updateTransactionStatus,
     getVendorWalletSummary
 };
