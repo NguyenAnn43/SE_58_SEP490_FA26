@@ -221,7 +221,13 @@ const googleLogin = async (req, res) => {
         headers: { Authorization: `Bearer ${accessToken}` },
       },
     );
-    const { email, email_verified: emailVerified } = await response.json();
+    const {
+      email,
+      email_verified: emailVerified,
+      name,
+      sub: googleId,
+      picture,
+    } = await response.json();
 
     if (!email || !emailVerified) {
       return res
@@ -229,16 +235,27 @@ const googleLogin = async (req, res) => {
         .json({ message: "Thông tin tài khoản Google không hợp lệ." });
     }
 
-    const user = await User.findOne({ email });
+    // UC-04: lần đầu đăng nhập Google → tự tạo tài khoản khách hàng (student)
+    let user = await User.findOne({ email });
+    let isNewUser = false;
+
     if (!user) {
-      return res
-        .status(401)
-        .json({ message: "Tài khoản không tồn tại trong hệ thống!" });
+      isNewUser = true;
+      user = new User({ name, email, googleId, role: "student", avatar: picture });
+      await user.save();
+      await notifyAdmin(req, {
+        title: "Khách hàng mới (Google)",
+        message: `${name} (${email}) vừa đăng nhập Google lần đầu`,
+        type: "NEW_USER",
+        actionLink: "users",
+      });
     }
 
     const token = generateToken(user);
-    return res.status(200).json({
-      message: "Đăng nhập Google thành công!",
+    return res.status(isNewUser ? 201 : 200).json({
+      message: isNewUser
+        ? "Tạo tài khoản qua Google thành công!"
+        : "Đăng nhập Google thành công!",
       token,
       user: {
         _id: user._id,
