@@ -1,5 +1,6 @@
 const MenuItem = require('../models/MenuItem');
 const { getVendorStatus } = require('./vendorHours');
+const { withPricing } = require('./pricing');
 
 /** Bỏ dấu, ký tự markdown, gộp khoảng trắng để so khớp tên món trong câu trả lời AI */
 const normalize = (str = '') => String(str)
@@ -34,9 +35,9 @@ const extractSuggestedItems = async (replyText, limit = 4) => {
     const text = normalize(replyText);
     if (!text) return [];
 
-    const items = await MenuItem.find({ isAvailable: true })
+    const items = (await MenuItem.find({ isAvailable: true })
         .populate('vendor', 'name openTime closeTime isActive isPaused pauseReason pausedUntil')
-        .lean();
+        .lean()).map((m) => withPricing(m));
 
     // Tên dài khớp trước để "Phở Bò Đặc Biệt" không bị tính thành "Phở Bò"
     const candidates = items

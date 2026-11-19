@@ -19,6 +19,10 @@ connectDB();
 const { startVendorAutoResume } = require('./utils/vendorAutoResume');
 startVendorAutoResume();
 
+// Gói ăn tuần / tháng: mỗi phút tạo đơn ngày ăn, nhắc bữa chưa xếp ngày, đóng gói hết hạn
+const { startMealPlanJobs } = require('./utils/mealPlanJobs');
+startMealPlanJobs(app);
+
 // ==========================================
 // 3. ROUTES DECLARATION
 // ==========================================
@@ -55,6 +59,7 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/favorites', require('./routes/favoriteRoutes'));
+app.use('/api/meal-plans', require('./routes/mealPlanRoutes'));
 
 // ==========================================
 // 4. CHẠY SERVER

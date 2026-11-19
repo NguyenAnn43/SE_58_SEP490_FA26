@@ -19,6 +19,7 @@ import Profile from './pages/Profile';
 import StudentMessages from './pages/StudentMessages';
 import Forum from './pages/Forum';
 import Favorites from './pages/Favorites';
+import MealPlans from './pages/MealPlans';
 import StudentOrderNotifier from './components/StudentOrderNotifier';
 import ChatWidget from './components/ChatWidget';
 
@@ -43,9 +44,10 @@ const InitialRoute = () => {
      );
   }
 
-  // Chưa đăng nhập -> Đá ra Login
+  // Chưa đăng nhập → vẫn xem được thực đơn (chế độ khách).
+  // Bấm "Thêm" / "Đặt món" sẽ báo "Vui lòng đăng nhập để đặt món!" rồi chuyển sang trang Đăng nhập.
   if (!token || !user) {
-    return <Navigate to="/login" replace />;
+    return <Home />;
   }
 
   // Đã đăng nhập -> Phân luồng về đúng "nhà" của từng người
@@ -111,6 +113,7 @@ function App() {
               <Route path="/messages" element={<StudentMessages />} />
               <Route path="/forum" element={<Forum />} />
               <Route path="/favorites" element={<Favorites />} />
+              <Route path="/meal-plans" element={<MealPlans />} />
               
               {/* 🌟 ROUTE DÀNH CHO NGƯỜI BÁN (VENDOR) */}
               <Route path="/vendor/*" element={<VendorPage />} />

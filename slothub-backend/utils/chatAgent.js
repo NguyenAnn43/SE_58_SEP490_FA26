@@ -1,6 +1,7 @@
 const MenuItem = require('../models/MenuItem');
 const TimeSlot = require('../models/TimeSlot');
 const { getVendorStatus, timeToMinutes } = require('./vendorHours');
+const { withPricing } = require('./pricing');
 const { validatePickupSchedule } = require('./pickupSchedule');
 const { generateWithFallback } = require('./geminiClient');
 
@@ -52,8 +53,10 @@ const loadCatalog = async () => {
             .lean(),
         TimeSlot.find({ isActive: true }).sort({ startTime: 1 }).lean(),
     ]);
-    const byId = new Map(menuItems.map((m) => [String(m._id), m]));
-    return { menuItems, slots, byId };
+    // Giá trong catalog = giá đang bán (đã trừ giảm giá) → lọc theo giá, tính tiền đơn chat đều đúng
+    const priced = menuItems.map((m) => withPricing(m));
+    const byId = new Map(priced.map((m) => [String(m._id), m]));
+    return { menuItems: priced, slots, byId };
 };
 
 const itemCard = (m, extra = {}) => {
@@ -62,6 +65,8 @@ const itemCard = (m, extra = {}) => {
         _id: m._id,
         name: m.name,
         price: m.price,
+        originalPrice: m.originalPrice ?? m.price,
+        discountPercent: m.discountPercent || 0,
         calories: m.calories ?? null,
         protein: m.protein ?? null,
         carbs: m.carbs ?? null,
@@ -91,7 +96,7 @@ const itemCard = (m, extra = {}) => {
 
 const interpret = async (message, ctx, catalog) => {
     const menuLines = catalog.menuItems.map((m) => [
-        m._id, m.name, m.vendor?.name || '', `${m.price}đ`,
+        m._id, m.name, m.vendor?.name || '', m.discountPercent ? `${m.price}đ (đang giảm ${m.discountPercent}%, giá gốc ${m.originalPrice}đ)` : `${m.price}đ`,
         m.calories != null ? `${m.calories}kcal` : 'chưa có kcal',
         m.numReviews > 0 ? `${(m.rating || 0).toFixed(1)}★(${m.numReviews})` : 'chưa có đánh giá',
         m.category || '',

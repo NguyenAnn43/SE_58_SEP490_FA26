@@ -29,6 +29,12 @@ const menuItemSchema = new mongoose.Schema({
     dailyQuota: { type: Number, default: 100 }, 
     totalSold: { type: Number, default: 0 },
 
+    // Giảm giá món (giá bán thực tế tính trong utils/pricing.js)
+    // discountPercent 0 = không giảm; bỏ trống ngày bắt đầu/kết thúc = áp dụng ngay / không hạn
+    discountPercent: { type: Number, default: 0, min: 0, max: 90 },
+    discountStartAt: { type: Date, default: null },
+    discountEndAt: { type: Date, default: null },
+
     // Đánh giá
     reviews: [reviewSchema], 
     rating: { type: Number, default: 0 }, 

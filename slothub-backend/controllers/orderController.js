@@ -6,8 +6,8 @@ const TimeSlot = require('../models/TimeSlot');
 const crypto = require('crypto');
 const { settleOrderPayment } = require('../utils/settleOrderPayment');
 const { getVendorStatus } = require('../utils/vendorHours');
+const { getEffectivePrice } = require('../utils/pricing');
 const { notifyVendorNewOrder } = require('../utils/vendorNotify');
-const { sendPickupEmail } = require('../utils/pickupEmail');
 const { issuePickupCode } = require('../utils/pickupCode');
 const {
     logOrderStatus,
@@ -65,11 +65,13 @@ const processVendorGroup = async (cartItems, slotOpts) => {
             };
         }
         vendorId = itemDb.vendor?._id || itemDb.vendor;
-        totalAmount += itemDb.price * cartItem.quantity;
+        // Giá chốt tại thời điểm đặt (đã trừ giảm giá món nếu đang áp dụng) — tính ở server
+        const unitPrice = getEffectivePrice(itemDb);
+        totalAmount += unitPrice * cartItem.quantity;
         processedItems.push({
             menuItem: itemDb._id,
             quantity: cartItem.quantity,
-            price: itemDb.price,
+            price: unitPrice,
             ...(itemDb.calories != null && { calories: itemDb.calories })
         });
     }
@@ -219,9 +221,7 @@ const createOrderCore = async (req, res, idempotencyKey) => {
                 .populate('vendor', 'name')
                 .populate('items.menuItem', 'name price imageUrl');
 
-            sendPickupEmail({ user, orders: populatedOrders, vendorNames }).catch((err) =>
-                console.log('❌ Lỗi gửi email mã nhận món:', err.message)
-            );
+            // Email mã nhận món được gửi khi chủ quầy XÁC NHẬN đơn (orderApprovalController.approveOrder)
 
             return res.status(201).json({
                 message: createdOrders.length > 1

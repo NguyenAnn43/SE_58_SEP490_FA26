@@ -12,6 +12,7 @@ import { PICKUP_SLOT_STORAGE_KEY, PICKUP_DATE_STORAGE_KEY, pickDefaultSlotId, ge
 import { useLocale } from '../context/LocaleContext';
 import { appAlert } from '../utils/appAlert';
 import LanguageToggle from '../components/LanguageToggle';
+import { PaymentResultPreviewButtons } from './PaymentResult';
 
 /** Chuẩn hóa ID quầy — đồng bộ với backend */
 const normalizeVendorId = (vendor) => {
@@ -126,7 +127,7 @@ const Checkout = () => {
       const res = await api.post('/cart/add', { menuItemId, quantity: change });
       setCart(res.data?.cart || res.data);
     } catch (err) {
-      appAlert(err.response?.data?.message || "Lỗi cập nhật số lượng", { type: 'error' });
+      appAlert([err.response?.data?.message || "Lỗi cập nhật số lượng", err.response?.data?.detail].filter(Boolean).join(' '), { type: 'error' });
     }
   };
 
@@ -781,6 +782,9 @@ const Checkout = () => {
                 </>
               )}
             </button>
+
+            {/* Chỉ hiện trên localhost: xem thử trang kết quả thanh toán (không trừ tiền, không tạo đơn) */}
+            <PaymentResultPreviewButtons className="mt-4" />
           </div>
         </aside>
 

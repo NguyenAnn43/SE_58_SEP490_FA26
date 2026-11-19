@@ -5,6 +5,29 @@ import { CheckCircle2, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext';
 import LanguageToggle from '../components/LanguageToggle';
 
+const IS_LOCALHOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+/** 2 nút xem thử trang kết quả (chỉ hiện trên localhost) — dùng để chụp ảnh / test giao diện */
+export const PaymentResultPreviewButtons = ({ className = '' }) => {
+    const navigate = useNavigate();
+    if (!IS_LOCALHOST) return null;
+    return (
+        <div className={`rounded-2xl border border-dashed border-gray-300 p-3 ${className}`}>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Test giao diện (chỉ localhost)</p>
+            <div className="flex gap-2">
+                <button type="button" onClick={() => navigate('/payment-result?preview=success')}
+                    className="flex-1 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1">
+                    <CheckCircle2 size={14} /> Thành công
+                </button>
+                <button type="button" onClick={() => navigate('/payment-result?preview=failed')}
+                    className="flex-1 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1">
+                    <XCircle size={14} /> Thất bại
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const PaymentResult = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -15,7 +38,16 @@ const PaymentResult = () => {
     useEffect(() => {
         setMessage(t('paymentResult.processing'));
         const searchParams = location.search;
-        
+
+        // CHẾ ĐỘ XEM THỬ (chỉ localhost): /payment-result?preview=success|failed
+        // → hiện giao diện kết quả, KHÔNG gọi backend, không đụng tới đơn / tiền / giỏ hàng.
+        const preview = new URLSearchParams(searchParams).get('preview');
+        if (IS_LOCALHOST && (preview === 'success' || preview === 'failed')) {
+            setStatus(preview);
+            setMessage(preview === 'failed' ? 'Bạn đã hủy thanh toán đơn hàng này.' : t('payment.success'));
+            return;
+        }
+
         if (!searchParams) {
             setStatus('failed');
             setMessage(t('paymentResult.invalid'));

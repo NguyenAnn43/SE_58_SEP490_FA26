@@ -14,6 +14,9 @@ const orderSchema = new mongoose.Schema({
 
     // Chống tạo đơn trùng khi gửi lại / thử lại request (VD bấm xác nhận 2 lần trong chatbot)
     idempotencyKey: { type: String, index: true },
+    // Đơn tự tạo từ gói ăn tuần / tháng (null với đơn thường)
+    mealPlanSubscription: { type: mongoose.Schema.Types.ObjectId, ref: 'MealPlanSubscription', default: null, index: true },
+    mealPlanMealId: { type: mongoose.Schema.Types.ObjectId, default: null },
 
     totalPrice: { type: Number, required: true },
     discountAmount: { type: Number, default: 0 },

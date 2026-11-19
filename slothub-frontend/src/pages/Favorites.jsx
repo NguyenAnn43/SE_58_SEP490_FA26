@@ -114,8 +114,15 @@ const Favorites = () => {
                     </div>
                     {f.vendor?.name && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Store size={12} /> {f.vendor.name}</p>}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs font-bold">
-                      {f.price != null && <span className="text-[#F27124] text-sm">{vnd(f.price)}</span>}
-                      {f.priceChanged && <span className="text-gray-400 line-through font-medium">{vnd(f.previousPrice)}</span>}
+                      {f.price != null && <span className={`${f.discountActive ? 'text-red-600' : 'text-[#F27124]'} text-sm`}>{vnd(f.price)}</span>}
+                      {f.discountActive ? (
+                        <>
+                          <span className="text-gray-400 line-through font-medium">{vnd(f.originalPrice)}</span>
+                          <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded">-{f.discountPercent}%</span>
+                        </>
+                      ) : (
+                        f.priceChanged && <span className="text-gray-400 line-through font-medium">{vnd(f.previousPrice)}</span>
+                      )}
                       {f.rating != null
                         ? <span className="flex items-center gap-0.5 text-amber-600"><Star size={12} className="fill-amber-400 text-amber-400" />{f.rating}/5 ({f.numReviews})</span>
                         : <span className="text-gray-400 font-medium">Chưa có đánh giá</span>}

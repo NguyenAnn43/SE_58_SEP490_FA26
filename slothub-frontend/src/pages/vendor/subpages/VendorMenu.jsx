@@ -1,6 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../api/axios';
-import { PlusCircle, Edit2, Trash2, Search, Loader2, Image as ImageIcon, Power, PowerOff, UtensilsCrossed, X, Star, MessageSquare, Flame, UploadCloud } from 'lucide-react';
+import { PlusCircle, Edit2, Trash2, Search, Loader2, Image as ImageIcon, Power, PowerOff, UtensilsCrossed, X, Star, MessageSquare, Flame, UploadCloud, Tag } from 'lucide-react';
+
+/** Date/ISO → giá trị cho <input type="datetime-local"> theo giờ máy */
+const toLocalInput = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+/** Giá trị datetime-local (giờ máy) → ISO gửi server; rỗng → null (không giới hạn) */
+const localInputToIso = (value) => (value ? new Date(value).toISOString() : null);
+const discountedPrice = (price, pct) => Math.round((Number(price) || 0) * (100 - (Number(pct) || 0)) / 100);
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '');
 
 const VendorMenu = () => {
   const [menuItems, setMenuItems] = useState([]);
@@ -62,11 +75,14 @@ const VendorMenu = () => {
         calories: item.calories != null ? String(item.calories) : '',
         protein: item.protein != null ? String(item.protein) : '',
         carbs: item.carbs != null ? String(item.carbs) : '',
-        fat: item.fat != null ? String(item.fat) : ''
+        fat: item.fat != null ? String(item.fat) : '',
+        discountPercent: item.discountPercent ? String(item.discountPercent) : '',
+        discountStartAt: toLocalInput(item.discountStartAt),
+        discountEndAt: toLocalInput(item.discountEndAt)
       });
     } else {
       setEditingItem(null);
-      setFormData({ name: '', price: '', description: '', imageUrl: '', category: 'Cơm', calories: '', protein: '', carbs: '', fat: '', isAvailable: true });
+      setFormData({ name: '', price: '', description: '', imageUrl: '', category: 'Cơm', calories: '', protein: '', carbs: '', fat: '', isAvailable: true, discountPercent: '', discountStartAt: '', discountEndAt: '' });
     }
     setImageFile(null);
     setImagePreview(item?.imageUrl || null);
@@ -152,6 +168,10 @@ const VendorMenu = () => {
         imageUrl,
         price: Number(formData.price),
         calories: formData.calories === '' ? '' : Number(formData.calories),
+        // Giảm giá: 0 = tắt; thời gian gửi dạng ISO (giờ máy chủ quầy), bỏ trống = không giới hạn
+        discountPercent: formData.discountPercent === '' || formData.discountPercent == null ? 0 : Number(formData.discountPercent),
+        discountStartAt: localInputToIso(formData.discountStartAt),
+        discountEndAt: localInputToIso(formData.discountEndAt),
       };
       if (editingItem) {
         await api.put(`/vendor/menu/${editingItem._id}`, payload);
@@ -251,7 +271,26 @@ const VendorMenu = () => {
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg line-clamp-1" title={item.name}>{item.name}</h3>
                 </div>
-                <p className="text-xl font-black text-[#F27124] mb-2">{item.price.toLocaleString()}đ</p>
+                {item.discountPercent > 0 ? (
+                  <div className="mb-2">
+                    <p className="flex items-center gap-2">
+                      <span className={`text-xl font-black ${item.discountActive ? 'text-red-500' : 'text-[#F27124]'}`}>
+                        {(item.discountActive ? item.effectivePrice : item.price).toLocaleString()}đ
+                      </span>
+                      {item.discountActive && <span className="text-xs portal-muted line-through">{item.price.toLocaleString()}đ</span>}
+                      <span className={`text-[11px] font-black px-1.5 py-0.5 rounded ${item.discountActive ? 'bg-red-500 text-white' : 'bg-gray-500/20 portal-muted'}`}>-{item.discountPercent}%</span>
+                    </p>
+                    <p className="text-[11px] portal-muted font-medium">
+                      {item.discountActive
+                        ? (item.discountEndAt ? `Đang giảm đến ${formatDateTime(item.discountEndAt)}` : 'Đang giảm giá (không hạn)')
+                        : (item.discountStartAt && new Date(item.discountStartAt) > new Date()
+                          ? `Giảm từ ${formatDateTime(item.discountStartAt)}`
+                          : 'Đợt giảm giá đã kết thúc')}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xl font-black text-[#F27124] mb-2">{item.price.toLocaleString()}đ</p>
+                )}
                 <div className="flex items-center gap-2 mb-2">
                   <span className="inline-flex items-center gap-1 text-amber-400 text-xs font-bold">
                     <Star size={14} className="fill-amber-400" />
@@ -331,6 +370,32 @@ const VendorMenu = () => {
                   <div className="space-y-1.5">
                     <label className="text-sm font-bold portal-text-secondary ml-1">Giá bán (VNĐ) <span className="text-red-500">*</span></label>
                     <input type="number" required min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className="w-full bg-[var(--portal-input-bg)] border border-[var(--portal-border)] rounded-xl px-4 py-3 text-[var(--portal-text)] focus:border-[#F27124] outline-none transition-colors" placeholder="VD: 35000" />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2 rounded-xl border border-dashed border-red-500/40 p-4">
+                    <label className="text-sm font-bold portal-text-secondary flex items-center gap-1.5">
+                      <Tag size={14} className="text-red-400" /> Giảm giá món (tuỳ chọn)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-xs portal-muted font-medium">Giảm (%) — 0 hoặc trống = không giảm</span>
+                        <input type="number" min="0" max="90" step="1" value={formData.discountPercent ?? ''} onChange={e => setFormData({ ...formData, discountPercent: e.target.value })} className="w-full bg-[var(--portal-input-bg)] border border-[var(--portal-border)] rounded-xl px-4 py-2.5 text-[var(--portal-text)] focus:border-red-400 outline-none" placeholder="VD: 20" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs portal-muted font-medium">Bắt đầu (trống = ngay)</span>
+                        <input type="datetime-local" value={formData.discountStartAt ?? ''} onChange={e => setFormData({ ...formData, discountStartAt: e.target.value })} className="w-full bg-[var(--portal-input-bg)] border border-[var(--portal-border)] rounded-xl px-3 py-2.5 text-[var(--portal-text)] focus:border-red-400 outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs portal-muted font-medium">Kết thúc (trống = không hạn)</span>
+                        <input type="datetime-local" value={formData.discountEndAt ?? ''} onChange={e => setFormData({ ...formData, discountEndAt: e.target.value })} className="w-full bg-[var(--portal-input-bg)] border border-[var(--portal-border)] rounded-xl px-3 py-2.5 text-[var(--portal-text)] focus:border-red-400 outline-none" />
+                      </div>
+                    </div>
+                    {Number(formData.discountPercent) > 0 && Number(formData.price) > 0 && (
+                      <p className="text-xs font-bold text-red-400">
+                        Giá sau giảm: {discountedPrice(formData.price, formData.discountPercent).toLocaleString()}đ
+                        <span className="portal-muted font-medium"> (giá gốc {Number(formData.price).toLocaleString()}đ) — món sẽ hiện ở mục "Đang giảm giá" trên trang chủ.</span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

@@ -6,6 +6,7 @@ const OrderStatusLog = require('../models/OrderStatusLog');
 const { reverseOrderPayment } = require('../utils/settleOrderPayment');
 const { logOrderStatus, logAudit, notifyStudent } = require('../utils/persistence');
 const { notifyAdmin } = require('../utils/adminNotify');
+const { sendPickupEmail } = require('../utils/pickupEmail');
 
 /**
  * Chủ quầy duyệt / từ chối đơn + hoàn tiền khi từ chối đơn đã thanh toán.
@@ -186,6 +187,28 @@ const approveOrder = async (req, res) => {
             type: 'ORDER_APPROVED',
             orderId: order._id,
         });
+
+        // Quầy đã nhận làm → giờ mới gửi email mã QR + OTP nhận món cho sinh viên (không chặn response)
+        // Kèm luôn các đơn KHÁC đã duyệt của sinh viên tại quầy này cùng khung giờ → 1 email có đủ mọi mã QR/OTP.
+        const sameSlot = order.pickupSlotStartAt
+            ? { pickupSlotStartAt: order.pickupSlotStartAt }
+            : { pickupSlot: order.pickupSlot };
+        Order.find({
+            user: order.user, vendor: vendor._id, approvalStatus: 'APPROVED',
+            status: { $in: ['Processing', 'Ready'] }, ...sameSlot,
+        })
+            .populate('user', 'name email')
+            .populate('vendor', 'name')
+            .populate('items.menuItem', 'name price imageUrl')
+            .then(async (list) => {
+                // đơn vừa duyệt luôn đứng đầu
+                list.sort((a, b) => (String(b._id) === String(order._id)) - (String(a._id) === String(order._id)));
+                const student = list[0]?.user;
+                if (!student?.email) return;
+                await sendPickupEmail({ user: student, orders: list, vendorNames: { [String(vendor._id)]: vendor.name }, approved: true });
+                console.log(`📧 Đã gửi email mã nhận món ${shortCode(order._id)} (${list.length} đơn cùng giờ)`);
+            })
+            .catch((err) => console.log('❌ Lỗi gửi email mã nhận món:', err.message));
 
         const populated = await Order.findById(order._id).populate(ORDER_POPULATE);
         res.status(200).json({ message: 'Đã duyệt đơn — chuyển sang Đang làm.', order: populated });

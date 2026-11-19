@@ -5,9 +5,9 @@ import { PortalThemeProvider, usePortalTheme } from '../../context/PortalThemeCo
 import api from '../../api/axios';
 import {
   LayoutDashboard, ShoppingBag, UtensilsCrossed, Wallet,
-  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Gift, Menu, X, BarChart3
-} from 'lucide-react';
+  Settings, LogOut, Bell, ExternalLink, Zap, MessageSquare, ScanLine, Gift, Menu, X, BarChart3, Package } from 'lucide-react';
 import VendorDemandStats from './subpages/VendorDemandStats';
+import VendorMealPlans from './subpages/VendorMealPlans';
 
 import VendorMenu from './subpages/VendorMenu';
 import VendorDashboard from './subpages/VendorDashboard';
@@ -150,6 +150,12 @@ const VendorPageContent = () => {
         announceNewOrder(noti);
         setUnreadCount((c) => c + 1);
         setOrdersRefreshKey((k) => k + 1);
+      } else if (noti?.type === 'MEAL_PLAN') {
+        setUnreadCount((c) => c + 1);
+        if (noti.orderId) setOrdersRefreshKey((k) => k + 1);
+        setOrderToast({ type: 'MEAL_PLAN', title: noti.title || 'Gói ăn', message: noti.message || '' });
+        if (toastTimer.current) window.clearTimeout(toastTimer.current);
+        toastTimer.current = window.setTimeout(() => setOrderToast(null), 12000);
       } else if (noti?.type === 'NEW_REVIEW' || noti?.type === 'PAYOUT_CONFIRMED') {
         setUnreadCount((c) => c + 1);
         if (noti?.type === 'PAYOUT_CONFIRMED') {
@@ -195,6 +201,7 @@ const VendorPageContent = () => {
     { id: 'pickup', label: 'Quét nhận món', icon: <ScanLine size={20} /> },
     { id: 'menu', label: 'Quản lý Thực đơn', icon: <UtensilsCrossed size={20} /> },
     { id: 'stats', label: 'Thống kê & Dự báo', icon: <BarChart3 size={20} /> },
+    { id: 'mealplans', label: 'Gói ăn tuần/tháng', icon: <Package size={20} /> },
     { id: 'forum', label: 'Diễn đàn & Voucher', icon: <Gift size={20} /> },
     { id: 'wallet', label: 'Ví & Doanh thu', icon: <Wallet size={20} /> },
     { id: 'messages', label: 'Tin nhắn', icon: <MessageSquare size={20} /> },
@@ -381,7 +388,7 @@ const VendorPageContent = () => {
                 type="button"
                 onClick={() => {
                   setOrderToast(null);
-                  setActiveTab(orderToast.type === 'PAYOUT_CONFIRMED' ? 'wallet' : 'orders');
+                  setActiveTab(orderToast.type === 'PAYOUT_CONFIRMED' ? 'wallet' : orderToast.type === 'MEAL_PLAN' ? 'mealplans' : 'orders');
                 }}
                 className={`w-full border-t py-2.5 text-sm font-black transition ${
                   orderToast.type === 'PAYOUT_CONFIRMED'
@@ -389,7 +396,7 @@ const VendorPageContent = () => {
                     : 'border-[#F27124]/15 bg-[#F27124]/5 text-[#F27124] hover:bg-[#F27124]/10'
                 }`}
               >
-                {orderToast.type === 'PAYOUT_CONFIRMED' ? 'Xem ví & mã GD →' : 'Xem đơn ngay →'}
+                {orderToast.type === 'PAYOUT_CONFIRMED' ? 'Xem ví & mã GD →' : orderToast.type === 'MEAL_PLAN' ? 'Xem lịch gói ăn →' : 'Xem đơn ngay →'}
               </button>
             </div>
           )}
@@ -407,6 +414,7 @@ const VendorPageContent = () => {
             {activeTab === 'pickup' && <VendorQrPickup onOrdersRefresh={() => setOrdersRefreshKey((k) => k + 1)} />}
             {activeTab === 'menu' && <VendorMenu />}
             {activeTab === 'stats' && <VendorDemandStats />}
+            {activeTab === 'mealplans' && <VendorMealPlans />}
             {activeTab === 'forum' && <VendorForum />}
             {activeTab === 'wallet' && <VendorWallet refreshKey={walletRefreshKey} />}
             {activeTab === 'settings' && <VendorSettings />}
@@ -416,6 +424,7 @@ const VendorPageContent = () => {
                 onGoOrders={() => setActiveTab('orders')}
                 onGoMenu={() => setActiveTab('menu')}
                 onGoWallet={() => setActiveTab('wallet')}
+                onGoMealPlans={() => setActiveTab('mealplans')}
               />
             )}
           </div>

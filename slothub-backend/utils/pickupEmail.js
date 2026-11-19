@@ -86,7 +86,11 @@ const buildOrderBlock = (order, vendorName) => {
     `;
 };
 
-const sendPickupEmail = async ({ user, orders, vendorNames = {} }) => {
+/**
+ * Gửi mã QR + OTP nhận món. Gọi khi CHỦ QUẦY XÁC NHẬN đơn (approved = true) —
+ * sinh viên chỉ nhận mã khi quầy đã nhận làm, tránh có mã cho đơn có thể bị từ chối.
+ */
+const sendPickupEmail = async ({ user, orders, vendorNames = {}, approved = false, subject: subjectOverride, headline, intro }) => {
   if (!user?.email || !orders?.length) return;
 
   const orderBlocks = orders.map((order) => {
@@ -96,9 +100,12 @@ const sendPickupEmail = async ({ user, orders, vendorNames = {} }) => {
   }).join('');
 
   const isBatch = orders.length > 1;
-  const subject = isBatch
+  const firstVendorName = vendorNames[String(orders[0].vendor?._id || orders[0].vendor)] || orders[0].vendor?.name || 'Quầy căng tin';
+  const subject = subjectOverride || (approved
+    ? `✅ [SlotHub] ${firstVendorName} đã xác nhận đơn #${String(orders[0]._id).slice(-6).toUpperCase()}${isBatch ? ` (+${orders.length - 1} đơn cùng giờ)` : ''} — mã nhận món`
+    : isBatch
     ? `🍱 [SlotHub] ${orders.length} mã nhận món — thanh toán thành công`
-    : `🍱 [SlotHub] Mã nhận món — ${vendorNames[String(orders[0].vendor?._id || orders[0].vendor)] || orders[0].vendor?.name || 'Quầy căng tin'}`;
+    : `🍱 [SlotHub] Mã nhận món — ${vendorNames[String(orders[0].vendor?._id || orders[0].vendor)] || orders[0].vendor?.name || 'Quầy căng tin'}`);
 
   const html = `
       <!DOCTYPE html>
@@ -107,11 +114,13 @@ const sendPickupEmail = async ({ user, orders, vendorNames = {} }) => {
         <div style="max-width:560px;margin:0 auto;padding:24px;">
           <div style="background:linear-gradient(135deg,#F27124,#ff985e);border-radius:20px 20px 0 0;padding:28px 24px;color:#fff;">
             <h1 style="margin:0;font-size:22px;">SlotHub · Canteen</h1>
-            <p style="margin:8px 0 0;opacity:0.95;font-size:14px;">Xin chào ${user.name || 'bạn'}, đơn hàng đã thanh toán thành công!</p>
+            <p style="margin:8px 0 0;opacity:0.95;font-size:14px;">Xin chào ${user.name || 'bạn'}, ${headline ? headline : approved ? `<strong>${firstVendorName}</strong> đã xác nhận đơn và đang chuẩn bị món!` : 'đơn hàng đã thanh toán thành công!'}</p>
           </div>
           <div style="background:#fff;padding:24px;border-radius:0 0 20px 20px;box-shadow:0 10px 40px rgba(0,0,0,0.06);">
             <p style="color:#475569;font-size:14px;line-height:1.6;margin-top:0;">
-              ${isBatch
+              ${intro ? intro : approved && isBatch
+      ? `Bạn có <strong>${orders.length} đơn</strong> tại quầy này cùng khung giờ. <strong>Mỗi đơn có mã QR / OTP riêng</strong> — vui lòng đưa đủ ${orders.length} mã khi nhận món (mã ở đơn nào chỉ nhận món của đơn đó).`
+      : !approved && isBatch
       ? `Bạn có <strong>${orders.length} đơn</strong> tại các quầy khác nhau. Mỗi quầy có mã QR và OTP riêng — vui lòng xuất trình đúng mã tại từng quầy khi nhận món.`
       : 'Dưới đây là mã QR và OTP để nhận món tại quầy. Bạn cũng có thể xem lại trong app mục <strong>Đơn hàng</strong>.'}
             </p>
@@ -127,7 +136,7 @@ const sendPickupEmail = async ({ user, orders, vendorNames = {} }) => {
     email: user.email,
     subject,
     html,
-    message: `Đơn hàng SlotHub đã thanh toán. Mã OTP: ${orders.map((o) => o.otpCode).join(', ')}`,
+    message: `${approved ? 'Quầy đã xác nhận đơn SlotHub.' : 'Đơn hàng SlotHub đã thanh toán.'} Mã OTP: ${orders.map((o) => o.otpCode).join(', ')}`,
   });
 };
 

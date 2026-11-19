@@ -2,6 +2,7 @@ const Cart = require('../models/Cart');
 const MenuItem = require('../models/MenuItem');
 const Vendor = require('../models/Vendor');
 const { getVendorStatus } = require('../utils/vendorHours');
+const { getEffectivePrice, withPricing } = require('../utils/pricing');
 
 const CART_POPULATE = {
     path: 'items.menuItem',
@@ -11,9 +12,10 @@ const CART_POPULATE = {
 const buildCartResponse = (cart) => {
     let totalPrice = 0;
     const vendorStatuses = {};
+    const now = new Date();
 
     cart.items.forEach((i) => {
-        if (i.menuItem?.price) totalPrice += i.menuItem.price * i.quantity;
+        if (i.menuItem?.price) totalPrice += getEffectivePrice(i.menuItem, now) * i.quantity;
     });
 
     for (const i of cart.items) {
@@ -35,8 +37,14 @@ const buildCartResponse = (cart) => {
         ? vendorIds.map((vid) => vendorStatuses[vid].message).find(Boolean) || 'Các quầy trong giỏ đã đóng cửa.'
         : '';
 
+    const plain = cart.toObject();
+    // Giá từng món trong giỏ = giá đang bán (đã trừ giảm giá), kèm giá gốc để hiển thị gạch ngang
+    plain.items = (plain.items || []).map((i) => (
+        i.menuItem && typeof i.menuItem === 'object' ? { ...i, menuItem: withPricing(i.menuItem, now) } : i
+    ));
+
     return {
-        ...cart.toObject(),
+        ...plain,
         totalPrice,
         vendorOpen,
         vendorStatusMessage,
@@ -64,28 +72,46 @@ exports.getCart = async (req, res) => {
 // 2. Thêm món vào giỏ (Xử lý thông minh: Trùng món thì tăng số lượng)
 exports.addToCart = async (req, res) => {
     try {
-        const { menuItemId, quantity } = req.body;
-        const item = await MenuItem.findById(menuItemId);
-
-        if (!item) return res.status(404).json({ message: 'Không tìm thấy món ăn!' });
-        if (item.countInStock < quantity) return res.status(400).json({ message: 'Kho không đủ số lượng!' });
-
-        const vendor = await Vendor.findById(item.vendor);
-        const vendorStatus = getVendorStatus(vendor);
-        if (!vendorStatus.isOpen) {
-            return res.status(400).json({ message: vendorStatus.message });
+        const { menuItemId } = req.body;
+        const quantity = Number(req.body.quantity ?? 1);
+        if (!Number.isInteger(quantity) || quantity === 0) {
+            return res.status(400).json({ message: 'Số lượng không hợp lệ!' });
         }
+        const item = await MenuItem.findById(menuItemId);
+        if (!item) return res.status(404).json({ message: 'Không tìm thấy món ăn!' });
 
         let cart = await Cart.findOne({ user: req.user.id });
         if (!cart) cart = new Cart({ user: req.user.id, items: [] });
 
         // Kiểm tra xem món này đã có trong giỏ chưa
-        const itemIndex = cart.items.findIndex(p => p.menuItem.toString() === menuItemId);
+        const itemIndex = cart.items.findIndex(p => p.menuItem.toString() === String(menuItemId));
+        const currentQty = itemIndex > -1 ? cart.items[itemIndex].quantity : 0;
+        const newQty = currentQty + quantity;
 
-        if (itemIndex > -1) {
-            cart.items[itemIndex].quantity += quantity;
+        // Chỉ kiểm tra khi TĂNG số lượng (giảm bớt luôn được phép, kể cả khi quầy đã đóng / món đã tắt)
+        if (quantity > 0) {
+            if (item.isAvailable === false) return res.status(400).json({ message: `Món "${item.name}" đã tạm hết, vui lòng chọn món khác.` });
+            // So TỔNG số lượng trong giỏ sau khi thêm với tồn kho (trước đây chỉ so phần thêm → vượt kho vẫn qua)
+            if (newQty > item.countInStock) {
+                return res.status(400).json({
+                    message: 'Kho không đủ số lượng!',
+                    detail: `"${item.name}" chỉ còn ${item.countInStock} phần${currentQty ? `, giỏ của bạn đã có ${currentQty}` : ''}.`,
+                    countInStock: item.countInStock,
+                });
+            }
+            const vendor = await Vendor.findById(item.vendor);
+            const vendorStatus = getVendorStatus(vendor);
+            if (!vendorStatus.isOpen) {
+                return res.status(400).json({ message: vendorStatus.message });
+            }
+        }
+
+        if (newQty <= 0) {
+            if (itemIndex > -1) cart.items.splice(itemIndex, 1);
+        } else if (itemIndex > -1) {
+            cart.items[itemIndex].quantity = newQty;
         } else {
-            cart.items.push({ menuItem: menuItemId, quantity });
+            cart.items.push({ menuItem: menuItemId, quantity: newQty });
         }
 
         await cart.save();

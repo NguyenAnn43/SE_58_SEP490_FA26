@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../api/axios';
-import { Bell, ShoppingBag, CheckCircle2, Loader2, Info, Star, Wallet } from 'lucide-react';
+import { Bell, ShoppingBag, CheckCircle2, Loader2, Info, Star, Wallet, Package } from 'lucide-react';
 
 const timeAgo = (dateStr) => {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -12,7 +12,7 @@ const timeAgo = (dateStr) => {
   return `${Math.floor(hrs / 24)} ngày trước`;
 };
 
-const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
+const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet, onGoMealPlans }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,6 +49,11 @@ const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
     if (noti.type === 'NEW_ORDER' && onGoOrders) onGoOrders();
     if (noti.type === 'NEW_REVIEW' && onGoMenu) onGoMenu();
     if (noti.type === 'PAYOUT_CONFIRMED' && onGoWallet) onGoWallet();
+    if (noti.type === 'MEAL_PLAN') {
+      // Bữa gói hôm nay (có đơn) → mở Quản lý đơn; còn lại → mở tab Gói ăn
+      if (noti.orderId && onGoOrders) onGoOrders();
+      else if (onGoMealPlans) onGoMealPlans();
+    }
   };
 
   const renderIcon = (type) => {
@@ -63,6 +68,13 @@ const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
       return (
         <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400 border border-amber-500/20 shadow-lg">
           <Star size={20} className="fill-amber-400" />
+        </div>
+      );
+    }
+    if (type === 'MEAL_PLAN') {
+      return (
+        <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-lg">
+          <Package size={20} />
         </div>
       );
     }
@@ -123,7 +135,7 @@ const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
           <div className="portal-card border rounded-3xl border border-[var(--portal-border)] p-12 text-center">
             <ShoppingBag size={48} className="mx-auto text-gray-600 mb-4 opacity-40" />
             <p className="portal-muted font-bold">Chưa có thông báo nào</p>
-            <p className="text-sm portal-muted mt-2">Khi sinh viên đặt đơn hoặc Admin chuyển khoản rút tiền, bạn sẽ thấy tại đây.</p>
+            <p className="text-sm portal-muted mt-2">Khi sinh viên đặt đơn, mua / dời gói ăn hoặc Admin chuyển khoản rút tiền, bạn sẽ thấy tại đây.</p>
           </div>
         ) : (
           notifications.map((noti) => (
@@ -135,6 +147,8 @@ const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
                   ? 'border-[var(--portal-border)] opacity-70'
                   : noti.type === 'PAYOUT_CONFIRMED'
                     ? 'border-green-500/40 shadow-lg shadow-green-500/10'
+                    : noti.type === 'MEAL_PLAN'
+                      ? 'border-emerald-500/40 shadow-lg shadow-emerald-500/10'
                     : 'border-[#F27124]/30 shadow-lg shadow-orange-500/5'
                 }`}
             >
@@ -143,9 +157,9 @@ const VendorNotifications = ({ onGoOrders, onGoMenu, onGoWallet }) => {
                 <div className="flex justify-between gap-2 items-start">
                   <h4 className={`font-black ${noti.isRead ? 'portal-muted' : 'text-[var(--portal-text)]'}`}>{noti.title}</h4>
                   {!noti.isRead && (
-                    <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${noti.type === 'PAYOUT_CONFIRMED' ? 'bg-green-600 text-white' : 'bg-[#F27124] text-white'
+                    <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${noti.type === 'PAYOUT_CONFIRMED' ? 'bg-green-600 text-white' : noti.type === 'MEAL_PLAN' ? 'bg-emerald-600 text-white' : 'bg-[#F27124] text-white'
                       }`}>
-                      {noti.type === 'PAYOUT_CONFIRMED' ? 'Chuyển khoản' : 'Mới'}
+                      {noti.type === 'PAYOUT_CONFIRMED' ? 'Chuyển khoản' : noti.type === 'MEAL_PLAN' ? 'Gói ăn' : 'Mới'}
                     </span>
                   )}
                 </div>

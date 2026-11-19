@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Favorite = require('../models/Favorite');
 const MenuItem = require('../models/MenuItem');
 const { getVendorStatus } = require('../utils/vendorHours');
+const { getEffectivePrice, isDiscountActive } = require('../utils/pricing');
 
 /**
  * Favorite List của sinh viên — luôn theo user lấy từ token (không nhận userId từ client),
@@ -28,21 +29,27 @@ const getMyFavorites = async (req, res) => {
             .sort({ createdAt: -1 })
             .populate({
                 path: 'menuItem',
-                select: 'name price imageUrl calories rating numReviews isAvailable countInStock description vendor category',
+                select: 'name price discountPercent discountStartAt discountEndAt imageUrl calories rating numReviews isAvailable countInStock description vendor category',
                 populate: { path: 'vendor', select: 'name openTime closeTime isActive isPaused pauseReason pausedUntil' },
             })
             .lean();
 
+        const now = new Date();
         const items = favorites.map((f) => {
             const m = f.menuItem;
             const availability = availabilityOf(m);
+            const discountActive = !!m && isDiscountActive(m, now);
             return {
                 favoriteId: f._id,
                 menuItemId: m?._id || null,
                 addedAt: f.createdAt,
                 name: m?.name || f.snapshot?.name || 'Món đã xoá',
                 imageUrl: m?.imageUrl || f.snapshot?.imageUrl || '',
-                price: m?.price ?? f.snapshot?.price ?? null,
+                // price = giá đang bán (đã trừ giảm giá); priceChanged so trên giá gốc
+                price: m ? getEffectivePrice(m, now) : (f.snapshot?.price ?? null),
+                originalPrice: m?.price ?? null,
+                discountActive,
+                discountPercent: discountActive ? m.discountPercent : 0,
                 priceChanged: !!m && f.snapshot?.price != null && f.snapshot.price !== m.price,
                 previousPrice: f.snapshot?.price ?? null,
                 calories: m?.calories ?? null,

@@ -213,6 +213,9 @@ const Login = () => {
             <p className="text-sm text-gray-500 font-medium">
               {pageSubtitle}
             </p>
+            <Link to="/" className="inline-block mt-3 text-[13px] font-bold text-[#F27124] hover:text-[#D95F1B] transition-colors">
+              ← Xem thực đơn không cần đăng nhập
+            </Link>
           </div>
 
           {/* Thông báo Lỗi / Thành công (Style tối giản) */}

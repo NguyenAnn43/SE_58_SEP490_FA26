@@ -2,9 +2,11 @@ import React from 'react';
 import { Plus, Flame, Store, Star } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext';
 import FavoriteButton from './FavoriteButton';
+import PriceTag, { hasDiscount } from './PriceTag';
 
 const FoodCard = ({ item, onAdd, onViewDetail }) => {
   const { t } = useLocale();
+  const discounted = hasDiscount(item);
   const isVendorClosedInSlot = item.vendorIsOpen === false;
   const isVendorClosedNow = item.vendorOpenNow === false;
   const isOutOfStock = item.countInStock === 0 || item.isAvailable === false || isVendorClosedInSlot;
@@ -55,6 +57,22 @@ const FoodCard = ({ item, onAdd, onViewDetail }) => {
             <Star size={12} className="fill-[#F27124] text-[#F27124]" /> {item.rating.toFixed(1)}
           </div>
         )}
+
+        {/* Badge giảm giá + bán chạy — góc dưới trái */}
+        {!isOutOfStock && (discounted || item.bestsellerRank) && (
+          <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5 z-10">
+            {discounted && (
+              <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-md">
+                -{item.discountPercent}%
+              </span>
+            )}
+            {item.bestsellerRank && (
+              <span className="bg-amber-400 text-gray-900 text-[11px] font-black px-2 py-1 rounded-lg shadow-md">
+                🔥 #{item.bestsellerRank} {{ week: t('food.bestsellerWeek'), month: t('food.bestsellerMonth') }[item.bestsellerPeriod] || t('food.bestsellerToday')}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* THÔNG TIN */}
@@ -80,10 +98,8 @@ const FoodCard = ({ item, onAdd, onViewDetail }) => {
         
         <div className="flex justify-between items-end border-t border-gray-50 pt-3 mt-auto">
           <div className="flex flex-col">
-            <span className="text-2xl font-black text-[#F27124] tracking-tight">
-              {item.price?.toLocaleString()}<span className="text-sm font-bold text-gray-400 ml-0.5 underline decoration-gray-200">đ</span>
-            </span>
-            {item.calories && (
+            <PriceTag item={item} size="lg" />
+            {item.calories > 0 && (
               <span className="inline-flex items-center text-[10px] font-extrabold uppercase tracking-wider text-gray-500 mt-1">
                 <Flame size={12} className="mr-1 text-orange-500" strokeWidth={3} /> {item.calories} kcal
               </span>
