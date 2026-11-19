@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Review = require('../models/Review');
 const Order = require('../models/Order'); // Import bảng Order mới
 
@@ -6,6 +7,20 @@ const createReview = async (req, res) => {
     try {
         const { vendorId, rating, comment, images } = req.body;
         const userId = req.user.id; // Lấy ID khách hàng từ token đăng nhập
+
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ message: 'Chỉ khách hàng mới được đánh giá gian hàng.' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(vendorId)) {
+            return res.status(400).json({ message: 'Gian hàng không hợp lệ.' });
+        }
+        const stars = Number(rating);
+        if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+            return res.status(400).json({ message: 'Số sao phải từ 1 đến 5.' });
+        }
+        if (!comment || !String(comment).trim()) {
+            return res.status(400).json({ message: 'Hãy để lại vài dòng nhận xét nhé!' });
+        }
 
         // KIỂM TRA CHỐNG FAKE REVIEW: 
         // Khách hàng này đã từng mua và nhận món (Completed) tại gian hàng này chưa?
@@ -21,12 +36,27 @@ const createReview = async (req, res) => {
             });
         }
 
+        // UC-28: mỗi khách hàng chỉ đánh giá 1 lần cho mỗi gian hàng
+        const alreadyReviewed = await Review.exists({ vendorId, user: userId });
+        if (alreadyReviewed) {
+            return res.status(400).json({ message: 'Bạn đã đánh giá gian hàng này rồi!' });
+        }
+
         // Lưu review vào Database
-        const newReview = new Review({ vendorId, user: userId, rating, comment, images });
+        const newReview = new Review({
+            vendorId,
+            user: userId,
+            rating: stars,
+            comment: String(comment).trim(),
+            images: Array.isArray(images) ? images : []
+        });
         await newReview.save();
 
         res.status(201).json({ message: 'Cảm ơn bạn đã đánh giá gian hàng!', data: newReview });
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ message: 'Bạn đã đánh giá gian hàng này rồi!' });
+        }
         res.status(500).json({ message: 'Lỗi server', error: error.message });
     }
 };
