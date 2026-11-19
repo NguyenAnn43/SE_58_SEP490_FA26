@@ -21,6 +21,7 @@ const vi = {
     favorites: 'Món yêu thích',
     mealPlans: 'Gói ăn tuần / tháng',
     messages: 'Tin nhắn & Report quầy',
+    notifications: 'Thông báo',
     forum: 'Diễn đàn món ngon',
     wallet: 'Ví SlotHub',
     home: 'Trang chủ',

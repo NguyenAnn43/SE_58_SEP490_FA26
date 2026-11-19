@@ -21,6 +21,7 @@ const en = {
     mealPlans: 'Weekly / monthly meal plans',
     favorites: 'Favorites',
     messages: 'Messages & reports',
+    notifications: 'Notifications',
     forum: 'Food forum',
     wallet: 'SlotHub Wallet',
     home: 'Home',
