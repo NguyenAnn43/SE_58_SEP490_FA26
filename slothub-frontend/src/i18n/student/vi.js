@@ -375,6 +375,19 @@ const vi = {
     viewAll: 'Xem đánh giá',
     close: 'Đóng',
   },
+  notifications: {
+    title: 'Thông báo',
+    subtitle: 'Cập nhật đơn hàng, hoàn tiền và gói ăn của bạn',
+    markAll: 'Đánh dấu đã đọc tất cả',
+    unread: 'Chưa đọc',
+    empty: 'Chưa có thông báo nào',
+    emptyHint: 'Khi quầy duyệt đơn, món sẵn sàng hoặc bạn được hoàn tiền, thông báo sẽ hiện ở đây.',
+    loadError: 'Không tải được thông báo, vui lòng thử lại.',
+    justNow: 'Vừa xong',
+    minutesAgo: '{{count}} phút trước',
+    hoursAgo: '{{count}} giờ trước',
+    daysAgo: '{{count}} ngày trước',
+  },
 };
 
 export default vi;

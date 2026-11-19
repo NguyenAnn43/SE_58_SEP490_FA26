@@ -375,6 +375,19 @@ const en = {
     viewAll: 'See reviews',
     close: 'Close',
   },
+  notifications: {
+    title: 'Notifications',
+    subtitle: 'Updates about your orders, refunds and meal plans',
+    markAll: 'Mark all as read',
+    unread: 'Unread',
+    empty: 'No notifications yet',
+    emptyHint: 'When a stall accepts your order, your food is ready or you get a refund, it will show up here.',
+    loadError: 'Could not load notifications, please try again.',
+    justNow: 'Just now',
+    minutesAgo: '{{count}} min ago',
+    hoursAgo: '{{count}} h ago',
+    daysAgo: '{{count}} days ago',
+  },
 };
 
 export default en;

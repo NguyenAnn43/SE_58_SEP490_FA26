@@ -17,6 +17,7 @@ import FoodDetail from './pages/FoodDetail';
 import PaymentResult from './pages/PaymentResult'; 
 import Profile from './pages/Profile';
 import StudentMessages from './pages/StudentMessages';
+import StudentNotifications from './pages/StudentNotifications';
 import Forum from './pages/Forum';
 import Favorites from './pages/Favorites';
 import MealPlans from './pages/MealPlans';
@@ -111,6 +112,7 @@ function App() {
               <Route path="/payment-result" element={<PaymentResult />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/messages" element={<StudentMessages />} />
+              <Route path="/notifications" element={<StudentNotifications />} />
               <Route path="/forum" element={<Forum />} />
               <Route path="/favorites" element={<Favorites />} />
               <Route path="/meal-plans" element={<MealPlans />} />
