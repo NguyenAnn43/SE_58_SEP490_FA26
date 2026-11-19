@@ -239,7 +239,12 @@ const googleLogin = async (req, res) => {
     let user = await User.findOne({ email });
     let isNewUser = false;
 
-    if (!user) {
+    if (user) {
+      // Đồng bộ ảnh đại diện Google + liên kết googleId cho tài khoản có sẵn
+      if (picture) user.avatar = picture;
+      if (!user.googleId) user.googleId = googleId;
+      await user.save();
+    } else {
       isNewUser = true;
       user = new User({ name, email, googleId, role: "student", avatar: picture });
       await user.save();
