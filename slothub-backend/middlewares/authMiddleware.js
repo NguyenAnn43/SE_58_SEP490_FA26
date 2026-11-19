@@ -39,4 +39,16 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+// Kiểm tra quyền theo vai trò (dùng sau protect), VD: router.use(authorize("admin"))
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: `Quyền truy cập bị từ chối! Tài khoản '${req.user.role}' không được phép thực hiện hành động này.`,
+      });
+    }
+    next();
+  };
+};
+
+module.exports = { protect, authorize };
