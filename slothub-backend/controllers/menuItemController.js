@@ -1,4 +1,5 @@
 const MenuItem = require('../models/MenuItem');
+const Order = require('../models/Order');
 const Vendor = require('../models/Vendor');
 const TimeSlot = require('../models/TimeSlot');
 const { getVendorStatus } = require('../utils/vendorHours');
@@ -189,8 +190,31 @@ const createMenuItemReview = async (req, res) => {
         const { rating, comment } = req.body;
         const menuItemId = req.params.id;
 
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ message: 'Chỉ khách hàng mới được đánh giá món ăn.' });
+        }
+        const stars = Number(rating);
+        if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+            return res.status(400).json({ message: 'Số sao phải từ 1 đến 5.' });
+        }
+        if (!comment || !String(comment).trim()) {
+            return res.status(400).json({ message: 'Vui lòng nhập nhận xét về món ăn.' });
+        }
+
         const menuItem = await MenuItem.findById(menuItemId);
         if (!menuItem) return res.status(404).json({ message: 'Không tìm thấy món ăn này!' });
+
+        // UC-27: chỉ đánh giá khi đã nhận món (đơn Completed có chứa món này)
+        const hasEaten = await Order.exists({
+            user: req.user.id,
+            status: 'Completed',
+            'items.menuItem': menuItem._id
+        });
+        if (!hasEaten) {
+            return res.status(403).json({
+                message: 'Bạn chỉ có thể đánh giá món sau khi đã đặt và nhận món này thành công.'
+            });
+        }
 
         const alreadyReviewed = menuItem.reviews.find(r => r.user.toString() === req.user.id.toString());
         if (alreadyReviewed) return res.status(400).json({ message: 'Bạn đã đánh giá món ăn này rồi!' });
@@ -199,8 +223,8 @@ const createMenuItemReview = async (req, res) => {
             user: req.user.id,
             name: req.user.name,
             avatar: req.user.avatar,
-            rating: Number(rating),
-            comment: comment
+            rating: stars,
+            comment: String(comment).trim()
         };
 
         menuItem.reviews.push(review);
@@ -214,8 +238,8 @@ const createMenuItemReview = async (req, res) => {
         await persistMenuItemReview({
             menuItem,
             user: req.user,
-            rating,
-            comment
+            rating: stars,
+            comment: review.comment
         });
         await notifyVendorNewReview(req, menuItem, review, req.user);
 
