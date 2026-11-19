@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
-import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy, Clock, Heart, Package } from 'lucide-react';
+import { ShoppingCart, Search, Trash2, Utensils, LogOut, ChevronDown, Wallet, Store, X, Minus, Plus, Receipt, UserCircle, Star, MessageSquare, Trophy, Clock, Heart, Package, Bell } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo'; 
 import WalletWidget from '../components/WalletWidget';
 import Footer from '../components/Footer';
@@ -12,6 +12,8 @@ import FoodDetailModal from '../components/FoodDetailModal';
 import { CART_UPDATED_EVENT } from '../components/ChatWidget';
 import PickupSlotFilter from '../components/PickupSlotFilter';
 import VendorStallFilter from '../components/VendorStallFilter';
+import StallReviewsPanel from '../components/StallReviewsPanel';
+import NotificationBell from '../components/NotificationBell';
 import { pickDefaultSlotId, MENU_VIEW_SLOT_STORAGE_KEY } from '../utils/vendorHours';
 import { useLocale } from '../context/LocaleContext';
 import LanguageToggle from '../components/LanguageToggle';
@@ -484,6 +486,9 @@ const Home = () => {
                 </div>
               </div>
 
+              {/* UC-08: chuông thông báo của sinh viên */}
+              <NotificationBell />
+
               {/* Wallet Widget Trigger */}
               <div 
                 onClick={() => setIsWalletOpen(true)} 
@@ -551,6 +556,9 @@ const Home = () => {
                     </button>
                     <button onClick={() => { navigate('/messages'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <MessageSquare size={18} /> {t('nav.messages')}
+                    </button>
+                    <button onClick={() => { navigate('/notifications'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
+                      <Bell size={18} /> {t('nav.notifications')}
                     </button>
                     <button onClick={() => { navigate('/forum'); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-bold text-gray-600 hover:bg-orange-50 hover:text-[#F27124] rounded-xl transition-colors">
                       <Trophy size={18} /> {t('nav.forum')}
@@ -631,6 +639,12 @@ const Home = () => {
               selectedVendorId={selectedVendorId}
               onSelect={setSelectedVendorId}
             />
+            {selectedVendorId && (
+              <StallReviewsPanel
+                vendorId={selectedVendorId}
+                vendorName={stallList.find((v) => String(v._id) === selectedVendorId)?.name}
+              />
+            )}
             <PickupSlotFilter
               variant="menuView"
               timeSlots={timeSlots}
@@ -848,6 +862,14 @@ const Home = () => {
             selectedVendorId={selectedVendorId}
             onSelect={setSelectedVendorId}
           />
+
+          {selectedVendorId && (
+            <StallReviewsPanel
+              compact
+              vendorId={selectedVendorId}
+              vendorName={stallList.find((v) => String(v._id) === selectedVendorId)?.name}
+            />
+          )}
 
           <PickupSlotFilter
             layout="vertical"

@@ -238,6 +238,9 @@ const FoodDetailModal = ({ itemId, initialItem, onClose, onAddedToCart, onItemUp
                   </p>
                   {canReview ? (
                     <form onSubmit={handleSubmitReview} className="space-y-3 bg-orange-50/50 rounded-2xl p-4 border border-orange-100">
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        Bạn chỉ đánh giá được sau khi đã nhận món này (đơn ở trạng thái "Đã nhận món").
+                      </p>
                       <div className="flex items-center gap-1">
                         {[1, 2, 3, 4, 5].map((n) => (
                           <button

@@ -9,4 +9,7 @@ const reviewSchema = new mongoose.Schema({
     images: [{ type: String }] 
 }, { timestamps: true });
 
+// Mỗi khách hàng chỉ có 1 đánh giá cho mỗi gian hàng (chặn gửi trùng khi bấm 2 lần)
+reviewSchema.index({ vendorId: 1, user: 1 }, { unique: true });
+
 module.exports = mongoose.model('Review', reviewSchema);
