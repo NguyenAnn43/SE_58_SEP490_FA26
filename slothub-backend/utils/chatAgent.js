@@ -165,7 +165,11 @@ Trả về DUY NHẤT JSON:
   "clarifyQuestion": string|null,   // câu hỏi lại khách (khi action = clarify)
   "unmatched": [string]             // tên món khách nói nhưng không có trong THỰC ĐƠN
 }
-Quy tắc: chỉ dùng id có trong THỰC ĐƠN; không bịa món; "món này" = món gợi ý đầu tiên hoặc món vừa nhắc; quantity mặc định 1.`;
+Quy tắc: chỉ dùng id có trong THỰC ĐƠN; không bịa món; "món này" = món gợi ý đầu tiên hoặc món vừa nhắc; quantity mặc định 1.
+- Câu có tiêu chí "ít calo / calo thấp" -> sortBy "calories_asc"; "rẻ nhất" -> "price_asc"; "đánh giá cao / ngon nhất" -> "rating_desc".
+- Câu VỪA đặt theo tiêu chí VỪA nêu tên món cụ thể (VD "đặt món ít calo nhất và 1 trà đá"): action "add_best";
+  criteria chỉ mô tả phần theo tiêu chí (keywords KHÔNG chứa món đã nêu tên; nếu món nêu tên là đồ uống thì excludeCategories ["Đồ uống"]);
+  "items" chứa các món đã nêu tên kèm số lượng.`;
 
     const { result } = await generateWithFallback(prompt, {
         responseMimeType: 'application/json',
@@ -180,6 +184,16 @@ Quy tắc: chỉ dùng id có trong THỰC ĐƠN; không bịa món; "món này"
 };
 
 // ===================== 2) TÌM & XẾP HẠNG MÓN (BACKEND, DỮ LIỆU THẬT) =====================
+
+/** Dự phòng khi LLM quên sortBy: suy ra từ câu của khách ("ít calo nhất" → calories_asc...) */
+const inferSortBy = (message) => {
+    const t = normalize(message);
+    if (/(it|thap|nhe) ?calo|calo (thap|it)|kcal thap|it kcal/.test(t)) return 'calories_asc';
+    if (/re nhat|gia (re|thap) nhat|re nhut/.test(t)) return 'price_asc';
+    if (/nhieu protein|giau dam|nhieu dam/.test(t)) return 'protein_desc';
+    if (/danh gia cao|ngon nhat|rating cao/.test(t)) return 'rating_desc';
+    return null;
+};
 
 const mergeCriteria = (prev = {}, next = {}, reset = false) => {
     const base = reset ? {} : { ...prev };
@@ -403,8 +417,12 @@ const applyIntentToDraft = (intent, draft, catalog, { bestItems = [] } = {}) => 
     const changed = [];
 
     if (intent.action === 'add_items' || intent.action === 'add_best') {
+        // add_best: món tốt nhất theo tiêu chí + các món khách nêu tên trong cùng câu ("ít calo nhất và trà đá")
         const toAdd = intent.action === 'add_best'
-            ? bestItems.map((m) => ({ menuItemId: m._id, quantity: Math.max(1, Number(intent.people) || 1) }))
+            ? [
+                ...bestItems.map((m) => ({ menuItemId: m._id, quantity: Math.max(1, Number(intent.people) || 1) })),
+                ...valid.filter((it) => !bestItems.some((m) => String(m._id) === String(it.menuItemId))),
+            ]
             : valid;
         for (const it of toAdd) {
             const q = Math.max(1, Math.floor(Number(it.quantity) || 1));
@@ -499,7 +517,20 @@ const handleChatTurn = async ({ message, context = {}, user }) => {
     // ----- Tìm / gợi ý -----
     if (intent.action === 'search' || intent.action === 'add_best') {
         const criteria = mergeCriteria(ctx.criteria, intent.criteria, intent.resetCriteria);
-        const { results, total, notes } = searchMenu(criteria, catalog);
+        const inferred = inferSortBy(message);
+        // LLM bỏ trống hoặc trả sortBy sai định dạng (mảng, tên lạ) → dùng tiêu chí suy ra từ câu của khách
+        if (inferred && !SORTS.includes(intent.criteria?.sortBy)) criteria.sortBy = inferred;
+        // "bữa / món ăn / ăn trưa..." (không nhắc đồ uống) → không chọn đồ uống làm "bữa"
+        const msgNorm = normalize(message);
+        if (/\bbua\b|mon an|\ban (trua|toi|sang|no)\b/.test(msgNorm) && !/uong|nuoc|tra |tra$|ca phe|sinh to/.test(msgNorm.replace(/tra da/g, ''))
+            && !criteria.category && !(criteria.excludeCategories || []).length) {
+            criteria.excludeCategories = ['Đồ uống'];
+        }
+        // Món khách đã nêu tên (VD "trà đá") không tính vào phần "chọn theo tiêu chí"
+        const namedIds = intent.action === 'add_best'
+            ? (intent.items || []).map((it) => String(it.menuItemId)).filter((id) => catalog.byId.has(id))
+            : [];
+        const { results, total, notes } = searchMenu(criteria, catalog, { excludeIds: namedIds });
         const desc = describeCriteria(criteria);
 
         if (intent.action === 'search') {
