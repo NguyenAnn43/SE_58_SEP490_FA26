@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import api from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
-import { connectUserSocket, getSocket } from '../../utils/socket';
+import { connectUserSocket, joinConversation } from '../../utils/socket';
 import {
   MessageSquare, Send, Loader2, Store, Shield, Plus, ChevronLeft, User
 } from 'lucide-react';
@@ -112,19 +112,30 @@ const MessagingCenter = ({ mode = 'student', theme = 'light', initialConversatio
       }
     };
 
+    // Kết nối lại (Render ngủ dậy / deploy lại / mạng chập chờn) → tải lại để bù tin nhắn bị lỡ
+    const onReconnect = () => {
+      loadConversations();
+      if (activeIdRef.current) loadMessagesRef.current?.(activeIdRef.current);
+    };
+
     s.on('conversation_updated', onUpdate);
     s.on('new_message', onNewMsg);
+    s.io.on('reconnect', onReconnect);
 
     return () => {
-      s.removeAllListeners('conversation_updated');
-      s.removeAllListeners('new_message');
+      s.off('conversation_updated', onUpdate);
+      s.off('new_message', onNewMsg);
+      s.io.off('reconnect', onReconnect);
     };
   }, [user, loadConversations]);
+
+  const loadMessagesRef = useRef(loadMessages);
+  loadMessagesRef.current = loadMessages;
 
   useEffect(() => {
     if (activeId) {
       loadMessages(activeId);
-      getSocket().emit('join_conversation', activeId);
+      joinConversation(activeId);
     }
   }, [activeId, loadMessages]);
 
