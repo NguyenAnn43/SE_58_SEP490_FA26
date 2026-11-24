@@ -61,6 +61,18 @@ Nếu chỉ muốn thêm gói ăn mẫu: `MONGODB_URI="<chuỗi Atlas>" node scr
 - **payOS**: trang quản lý payOS → kênh thanh toán → **Webhook URL** =
   `https://<tên-service>.onrender.com/api/payment/payos_webhook`.
 
+## 5. Gửi email trên Render Free: Brevo
+
+Render Free **chặn kết nối SMTP** (cổng 25/465/587), nên Gmail SMTP không gửi được mail từ server.
+Backend tự chuyển sang API HTTPS của Brevo khi có biến `BREVO_API_KEY` (miễn phí 300 mail/ngày):
+
+1. Đăng ký https://www.brevo.com → **Senders, Domains & Dedicated IPs → Senders → Add a sender**:
+   email = `EMAIL_USER` (Gmail gửi mail), tên `SlotHub` → bấm link xác nhận Brevo gửi về hộp thư.
+2. **SMTP & API → API Keys → Generate a new API key**.
+3. Render → **Environment**: thêm `BREVO_API_KEY` = key vừa tạo → Save.
+
+Mail gửi từ Gmail qua Brevo có thể vào **Spam** ở lần đầu — đánh dấu "Không phải spam".
+
 ## Kiểm tra sau khi deploy
 
 - Mở link Vercel khi chưa đăng nhập → thấy thực đơn.
